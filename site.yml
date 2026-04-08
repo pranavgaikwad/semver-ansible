@@ -1,0 +1,32 @@
+---
+- name: Provision podman machine
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tags: [vm, setup]
+  roles:
+    - role: podman_vm
+
+- name: Run semver-analyzer migration pipeline
+  hosts: podman_vm
+  gather_facts: true
+  become: false
+  environment:
+    GOOSE_PROVIDER: "{{ goose_provider }}"
+    GOOSE_MODEL: "{{ goose_model }}"
+    GCP_PROJECT_ID: "{{ gcp_project_id }}"
+    GCP_LOCATION: "{{ gcp_location }}"
+    GOOGLE_APPLICATION_CREDENTIALS: "{{ gcp_credentials_dest }}"
+  roles:
+    - { role: system_deps, tags: [system, setup] }
+    - { role: nodejs, tags: [nodejs, setup] }
+    - { role: rust, tags: [rust, setup] }
+    - { role: clone_repos, tags: [repos, setup] }
+    - { role: build_rust, tags: [build, setup] }
+    - { role: kantra, tags: [kantra, setup] }
+    - { role: goose, tags: [goose, setup] }
+    - { role: workspace, tags: [workspace, setup] }
+    - { role: semver_analysis, tags: [analyze, pipeline] }
+    - { role: semver_rules, tags: [rules, pipeline] }
+    - { role: kantra_analysis, tags: [scan, pipeline] }
+    - { role: apply_fixes, tags: [fix, pipeline] }

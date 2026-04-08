@@ -1,0 +1,44 @@
+---
+- name: Derive app name from repo URL
+  ansible.builtin.set_fact:
+    app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
+  when: app_name is not defined
+
+- name: Check if semver report already exists
+  ansible.builtin.stat:
+    path: "{{ outputs_dir }}/semver_report.json"
+  register: semver_report
+
+- name: Run semver-analyzer analyze
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.nvm/nvm.sh &&
+      source {{ ansible_env.HOME }}/.cargo/env &&
+      export PATH="{{ ansible_env.HOME }}/.local/bin:$PATH" &&
+      export YARN_ENABLE_SCRIPTS=false &&
+      ./semver-analyzer analyze typescript
+      --dep-build-command "source ~/.nvm/nvm.sh && nvm exec {{ node_version }} bash -c 'export NODE_ENV=development && yarn install && npx gulp buildPatternfly'"
+      --repo {{ repos_dir }}/patternfly-react
+      --from {{ patternfly_from_version }}
+      --to {{ patternfly_to_version }}
+      --dep-repo {{ repos_dir }}/patternfly
+      --dep-from {{ patternfly_from_version }}
+      --dep-to {{ patternfly_to_version }}
+      --pipeline-v2
+      --llm-command "goose run --no-session -q -t"
+      --llm-all-files
+      --llm-timeout {{ llm_timeout }}
+      -o {{ outputs_dir }}/semver_report.json
+      --build-command 'corepack yarn build'
+    chdir: "{{ workspace_dir }}"
+  args:
+    executable: /bin/bash
+  when: not semver_report.stat.exists or (force_rerun | default(false) | bool)
+  async: 7200
+  poll: 30
+
+- name: Verify semver report was generated
+  ansible.builtin.stat:
+    path: "{{ outputs_dir }}/semver_report.json"
+  register: semver_report_verify
+  failed_when: not semver_report_verify.stat.exists

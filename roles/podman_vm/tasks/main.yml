@@ -1,0 +1,64 @@
+---
+- name: Check if podman machine exists
+  ansible.builtin.command:
+    cmd: "podman machine inspect {{ vm_name }}"
+  register: machine_inspect
+  changed_when: false
+  failed_when: false
+
+- name: Initialize podman machine
+  ansible.builtin.command:
+    cmd: >-
+      podman machine init {{ vm_name }}
+      --cpus {{ vm_cpus }}
+      --memory {{ vm_memory }}
+      --disk-size {{ vm_disk_size }}
+      --rootful
+  when: machine_inspect.rc != 0
+
+- name: Stop any other running podman machine
+  ansible.builtin.shell:
+    cmd: >-
+      podman machine list --format '{{ '{{' }}.Name{{ '}}' }} {{ '{{' }}.Running{{ '}}' }}' |
+      grep -v '{{ vm_name }}' | grep 'true' | awk '{print $1}' |
+      xargs -I{} podman machine stop {} || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Start podman machine
+  ansible.builtin.command:
+    cmd: "podman machine start {{ vm_name }}"
+  register: machine_start
+  changed_when: "'already running' not in (machine_start.stderr | default(''))"
+  failed_when:
+    - machine_start.rc != 0
+    - "'already running' not in (machine_start.stderr | default(''))"
+
+- name: Get podman machine SSH config
+  ansible.builtin.command:
+    cmd: "podman machine inspect {{ vm_name }}"
+  register: machine_info
+  changed_when: false
+
+- name: Parse SSH details
+  ansible.builtin.set_fact:
+    vm_ssh_port: "{{ (machine_info.stdout | from_json)[0].SSHConfig.Port }}"
+    vm_ssh_key: "{{ (machine_info.stdout | from_json)[0].SSHConfig.IdentityPath }}"
+    vm_ssh_user: "{{ (machine_info.stdout | from_json)[0].SSHConfig.RemoteUsername }}"
+
+- name: Add VM to in-memory inventory
+  ansible.builtin.add_host:
+    name: podman_vm
+    groups: podman_vm
+    ansible_host: localhost
+    ansible_port: "{{ vm_ssh_port }}"
+    ansible_user: "{{ vm_ssh_user }}"
+    ansible_ssh_private_key_file: "{{ vm_ssh_key }}"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+- name: Wait for SSH to become available
+  ansible.builtin.wait_for:
+    host: localhost
+    port: "{{ vm_ssh_port }}"
+    timeout: 60

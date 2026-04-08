@@ -1,0 +1,37 @@
+---
+- name: Derive app name from repo URL
+  ansible.builtin.set_fact:
+    app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
+  when: app_name is not defined
+
+- name: Create workspace directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ workspace_dir }}"
+    - "{{ outputs_dir }}"
+    - "{{ outputs_dir }}/fix-guidance"
+    - "{{ outputs_dir }}/semver_rules"
+    - "{{ outputs_dir }}/{{ app_name }}/kantra"
+
+- name: Symlink semver-analyzer binary
+  ansible.builtin.file:
+    src: "{{ repos_dir }}/semver-analyzer/target/release/semver-analyzer"
+    dest: "{{ workspace_dir }}/semver-analyzer"
+    state: link
+    force: true
+
+- name: Symlink frontend-analyzer-provider binary
+  ansible.builtin.file:
+    src: "{{ repos_dir }}/frontend-analyzer-provider/target/release/frontend-analyzer-provider"
+    dest: "{{ workspace_dir }}/frontend-analyzer-provider"
+    state: link
+    force: true
+
+- name: Generate provider_settings.json
+  ansible.builtin.template:
+    src: provider_settings.json.j2
+    dest: "{{ workspace_dir }}/provider_settings.json"
+    mode: "0644"

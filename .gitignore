@@ -1,0 +1,12 @@
+# Vault password file
+.vault_password
+
+# Encrypted vault (contains secrets even when encrypted)
+group_vars/all/vault.yml
+
+# Ansible retry files
+*.retry
+
+# Python
+__pycache__/
+*.pyc

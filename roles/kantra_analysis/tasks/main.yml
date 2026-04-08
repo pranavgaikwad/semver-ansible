@@ -1,0 +1,71 @@
+---
+- name: Derive app name from repo URL
+  ansible.builtin.set_fact:
+    app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
+  when: app_name is not defined
+
+- name: Check if frontend-analyzer-provider is already running
+  ansible.builtin.shell:
+    cmd: "pgrep -f 'frontend-analyzer-provider serve' || true"
+  args:
+    executable: /bin/bash
+  register: fap_running
+  changed_when: false
+
+- name: Start frontend-analyzer-provider in background
+  ansible.builtin.shell:
+    cmd: >-
+      nohup ./frontend-analyzer-provider serve -p {{ frontend_provider_port }}
+      > {{ outputs_dir }}/frontend-provider.log 2>&1 &
+      echo $!
+    chdir: "{{ workspace_dir }}"
+  args:
+    executable: /bin/bash
+  register: fap_pid
+  when: fap_running.stdout | trim == ""
+
+- name: Record provider PID
+  ansible.builtin.set_fact:
+    frontend_provider_pid: "{{ fap_pid.stdout | trim }}"
+  when: fap_pid is changed
+
+- name: Wait for frontend-analyzer-provider to be ready
+  ansible.builtin.wait_for:
+    port: "{{ frontend_provider_port }}"
+    timeout: 30
+
+- name: Run kantra analysis
+  ansible.builtin.shell:
+    cmd: >-
+      export PATH="{{ ansible_env.HOME }}/.kantra:{{ ansible_env.HOME }}/.local/bin:$PATH" &&
+      kantra analyze
+      --provider java
+      --input {{ repos_dir }}/{{ app_name }}
+      --output {{ outputs_dir }}/{{ app_name }}/kantra
+      --rules {{ outputs_dir }}/semver_rules
+      --override-provider-settings {{ workspace_dir }}/provider_settings.json
+      --enable-default-rulesets=false
+      --no-dependency-rules
+      --mode source-only
+      --run-local
+      --overwrite
+    chdir: "{{ workspace_dir }}"
+  args:
+    executable: /bin/bash
+  async: 3600
+  poll: 15
+
+- name: Stop frontend-analyzer-provider
+  ansible.builtin.shell:
+    cmd: >-
+      kill {{ frontend_provider_pid | default('') }} 2>/dev/null ||
+      pkill -f 'frontend-analyzer-provider serve' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Verify kantra output exists
+  ansible.builtin.stat:
+    path: "{{ outputs_dir }}/{{ app_name }}/kantra/output.json"
+  register: kantra_output
+  failed_when: not kantra_output.stat.exists

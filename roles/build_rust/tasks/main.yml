@@ -1,0 +1,34 @@
+---
+- name: Build semver-analyzer (release)
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.cargo/env &&
+      cargo build --release
+    chdir: "{{ repos_dir }}/semver-analyzer"
+  args:
+    executable: /bin/bash
+  register: semver_build
+  changed_when: "'Compiling' in semver_build.stderr"
+
+- name: Verify semver-analyzer binary
+  ansible.builtin.stat:
+    path: "{{ repos_dir }}/semver-analyzer/target/release/semver-analyzer"
+  register: semver_binary
+  failed_when: not semver_binary.stat.exists
+
+- name: Build frontend-analyzer-provider (release)
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.cargo/env &&
+      cargo build --release
+    chdir: "{{ repos_dir }}/frontend-analyzer-provider"
+  args:
+    executable: /bin/bash
+  register: fap_build
+  changed_when: "'Compiling' in fap_build.stderr"
+
+- name: Verify frontend-analyzer-provider binary
+  ansible.builtin.stat:
+    path: "{{ repos_dir }}/frontend-analyzer-provider/target/release/frontend-analyzer-provider"
+  register: fap_binary
+  failed_when: not fap_binary.stat.exists

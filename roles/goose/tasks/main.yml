@@ -1,0 +1,32 @@
+---
+- name: Check if goose is already installed
+  ansible.builtin.stat:
+    path: "{{ ansible_env.HOME }}/.local/bin/goose"
+  register: goose_exists
+
+- name: Install goose CLI
+  ansible.builtin.shell:
+    cmd: "curl -fsSL {{ goose_install_url }} | bash"
+  args:
+    executable: /bin/bash
+  environment:
+    CONFIGURE: "false"
+  when: not goose_exists.stat.exists
+
+- name: Verify goose installation
+  ansible.builtin.command:
+    cmd: "{{ ansible_env.HOME }}/.local/bin/goose --version"
+  changed_when: false
+
+- name: Create GCP credentials directory
+  ansible.builtin.file:
+    path: "{{ gcp_credentials_dest | dirname }}"
+    state: directory
+    mode: "0700"
+
+- name: Write GCP service account key
+  ansible.builtin.copy:
+    content: "{{ gcp_service_account_key }}"
+    dest: "{{ gcp_credentials_dest }}"
+    mode: "0600"
+  no_log: true

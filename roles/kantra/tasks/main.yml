@@ -1,0 +1,67 @@
+---
+- name: Detect VM architecture
+  ansible.builtin.set_fact:
+    kantra_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+- name: Find latest kantra release with assets
+  ansible.builtin.shell:
+    cmd: |
+      curl -s https://api.github.com/repos/konveyor/kantra/releases | python3 -c "
+      import json, sys
+      for r in json.load(sys.stdin):
+          if r.get('assets'):
+              print(r['tag_name'])
+              break
+      "
+  args:
+    executable: /bin/bash
+  register: kantra_latest
+  changed_when: false
+  when: kantra_version == 'latest'
+
+- name: Set kantra download version
+  ansible.builtin.set_fact:
+    kantra_download_version: >-
+      {{ (kantra_latest.stdout | trim) if kantra_version == 'latest' else kantra_version }}
+
+- name: Check if kantra is already installed
+  ansible.builtin.stat:
+    path: "{{ ansible_env.HOME }}/.kantra/kantra"
+  register: kantra_exists
+
+- name: Create kantra directory
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.kantra"
+    state: directory
+    mode: "0755"
+
+- name: Download kantra
+  ansible.builtin.get_url:
+    url: "https://github.com/konveyor/kantra/releases/download/{{ kantra_download_version }}/kantra.linux.{{ kantra_arch }}.zip"
+    dest: /tmp/kantra.zip
+    mode: "0644"
+  when: not kantra_exists.stat.exists
+
+- name: Extract kantra
+  ansible.builtin.unarchive:
+    src: /tmp/kantra.zip
+    dest: "{{ ansible_env.HOME }}/.kantra"
+    remote_src: true
+  when: not kantra_exists.stat.exists
+
+- name: Make kantra executable
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.kantra/kantra"
+    mode: "0755"
+
+- name: Symlink kantra to PATH
+  ansible.builtin.file:
+    src: "{{ ansible_env.HOME }}/.kantra/kantra"
+    dest: "{{ ansible_env.HOME }}/.local/bin/kantra"
+    state: link
+    force: true
+
+- name: Clean up kantra zip
+  ansible.builtin.file:
+    path: /tmp/kantra.zip
+    state: absent

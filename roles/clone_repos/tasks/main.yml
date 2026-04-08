@@ -1,0 +1,79 @@
+---
+- name: Validate app_repo_url is defined
+  ansible.builtin.assert:
+    that:
+      - app_repo_url is defined
+      - app_repo_url | length > 0
+    fail_msg: "app_repo_url must be set. Pass it with -e app_repo_url=https://..."
+
+- name: Derive app name from repo URL
+  ansible.builtin.set_fact:
+    app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
+
+- name: Create repos directory
+  ansible.builtin.file:
+    path: "{{ repos_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Clone patternfly-react
+  ansible.builtin.git:
+    repo: "{{ patternfly_react_repo }}"
+    dest: "{{ repos_dir }}/patternfly-react"
+    version: "{{ patternfly_to_version }}"
+    clone: true
+    update: true
+
+- name: Fetch patternfly-react from-version tag
+  ansible.builtin.command:
+    cmd: "git fetch origin refs/tags/{{ patternfly_from_version }}:refs/tags/{{ patternfly_from_version }}"
+    chdir: "{{ repos_dir }}/patternfly-react"
+  changed_when: false
+  failed_when: false
+
+- name: Clone patternfly
+  ansible.builtin.git:
+    repo: "{{ patternfly_repo }}"
+    dest: "{{ repos_dir }}/patternfly"
+    version: "{{ patternfly_to_version }}"
+    clone: true
+    update: true
+
+- name: Fetch patternfly from-version tag
+  ansible.builtin.command:
+    cmd: "git fetch origin refs/tags/{{ patternfly_from_version }}:refs/tags/{{ patternfly_from_version }}"
+    chdir: "{{ repos_dir }}/patternfly"
+  changed_when: false
+  failed_when: false
+
+- name: Clone konveyor-core
+  ansible.builtin.git:
+    repo: "{{ konveyor_core_repo }}"
+    dest: "{{ repos_dir }}/konveyor-core"
+    version: main
+    clone: true
+    update: true
+
+- name: Clone semver-analyzer
+  ansible.builtin.git:
+    repo: "{{ semver_analyzer_repo }}"
+    dest: "{{ repos_dir }}/semver-analyzer"
+    version: main
+    clone: true
+    update: true
+
+- name: Clone frontend-analyzer-provider
+  ansible.builtin.git:
+    repo: "{{ frontend_provider_repo }}"
+    dest: "{{ repos_dir }}/frontend-analyzer-provider"
+    version: main
+    clone: true
+    update: true
+
+- name: Clone user application repo
+  ansible.builtin.git:
+    repo: "{{ app_repo_url }}"
+    dest: "{{ repos_dir }}/{{ app_name }}"
+    version: "{{ app_repo_branch }}"
+    clone: true
+    update: true

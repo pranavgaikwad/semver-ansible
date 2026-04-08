@@ -1,0 +1,59 @@
+---
+# PatternFly versions
+patternfly_from_version: "v5.4.0"
+patternfly_to_version: "v6.4.0"
+
+# Application repo (required — pass via -e app_repo_url=https://...)
+# app_repo_url: ""
+app_repo_branch: "main"
+
+# Node.js
+node_version: "20.11.0"
+npm_packages: []
+# Example:
+#   - { name: "typescript", version: "5.3.3" }
+#   - { name: "gulp-cli", version: "latest" }
+
+# VM configuration
+vm_name: "semver-pipeline"
+vm_cpus: 6
+vm_memory: 8192
+vm_disk_size: 100
+
+# Kantra
+kantra_version: "latest"
+
+# Goose / LLM (GCP Vertex AI)
+# goose_provider, goose_model, gcp_project_id, gcp_location are in vault.yml
+gcp_credentials_dest: "/home/core/.config/gcloud/service-account-key.json"
+llm_timeout: 300
+
+# Paths inside VM
+base_dir: "/home/core/pipeline"
+repos_dir: "{{ base_dir }}/repos"
+workspace_dir: "{{ base_dir }}/workspace"
+outputs_dir: "{{ workspace_dir }}/outputs"
+
+# Repo URLs
+patternfly_react_repo: "https://github.com/patternfly/patternfly-react.git"
+patternfly_repo: "https://github.com/patternfly/patternfly.git"
+konveyor_core_repo: "https://github.com/shawn-hurley/konveyor-core.git"
+semver_analyzer_repo: "https://github.com/shawn-hurley/semver-analyzer.git"
+frontend_provider_repo: "https://github.com/shawn-hurley/frontend-analyzer-provider.git"
+
+# System packages to layer via rpm-ostree on Fedora CoreOS
+system_packages:
+  - gcc
+  - gcc-c++
+  - make
+  - openssl-devel
+  - pkg-config
+  - bzip2
+  - cmake
+  - unzip
+
+# Frontend analyzer provider
+frontend_provider_port: 9002
+
+# Goose installation
+goose_install_url: "https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh"

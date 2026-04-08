@@ -1,0 +1,86 @@
+---
+- name: Derive app name from repo URL
+  ansible.builtin.set_fact:
+    app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
+  when: app_name is not defined
+
+- name: Generate migration branch name
+  ansible.builtin.set_fact:
+    migration_branch: "migration/{{ lookup('pipe', 'date -u +%Y%m%dT%H%M%S') }}"
+
+- name: Create migration branch
+  ansible.builtin.command:
+    cmd: "git checkout -b {{ migration_branch }}"
+    chdir: "{{ repos_dir }}/{{ app_name }}"
+
+- name: Reset migration branch to base
+  ansible.builtin.command:
+    cmd: "git reset --hard {{ app_repo_branch }}"
+    chdir: "{{ repos_dir }}/{{ app_name }}"
+
+- name: Apply pattern-based fixes
+  ansible.builtin.shell:
+    cmd: >-
+      ./frontend-analyzer-provider fix {{ repos_dir }}/{{ app_name }}
+      --strategies {{ outputs_dir }}/fix-guidance/fix-strategies.json
+      --input {{ outputs_dir }}/{{ app_name }}/kantra/output.json
+      --apply
+    chdir: "{{ workspace_dir }}"
+  args:
+    executable: /bin/bash
+  async: 1800
+  poll: 15
+
+- name: Stage and commit pattern-based fixes
+  ansible.builtin.shell:
+    cmd: |
+      git add -A
+      git diff --cached --quiet && echo "no changes" || git commit -s -m "Apply pattern-based migration fixes (semver-analyzer)"
+    chdir: "{{ repos_dir }}/{{ app_name }}"
+  args:
+    executable: /bin/bash
+  register: pattern_commit
+  changed_when: "'no changes' not in pattern_commit.stdout"
+
+- name: Apply LLM-based fixes
+  ansible.builtin.shell:
+    cmd: >-
+      export PATH="{{ ansible_env.HOME }}/.local/bin:$PATH" &&
+      ./frontend-analyzer-provider fix {{ repos_dir }}/{{ app_name }}
+      --input {{ outputs_dir }}/{{ app_name }}/kantra/output.json
+      --apply
+      --llm-provider goose
+      --llm-timeout={{ llm_timeout }}
+      --strategies {{ outputs_dir }}/fix-guidance/fix-strategies.json
+    chdir: "{{ workspace_dir }}"
+  args:
+    executable: /bin/bash
+  async: 3600
+  poll: 15
+
+- name: Stage and commit LLM-based fixes
+  ansible.builtin.shell:
+    cmd: |
+      git add -A
+      git diff --cached --quiet && echo "no changes" || git commit -s -m "Apply LLM-based migration fixes (semver-analyzer + goose)"
+    chdir: "{{ repos_dir }}/{{ app_name }}"
+  args:
+    executable: /bin/bash
+  register: llm_commit
+  changed_when: "'no changes' not in llm_commit.stdout"
+
+- name: Show migration summary
+  ansible.builtin.shell:
+    cmd: "git log --oneline {{ app_repo_branch }}..HEAD"
+    chdir: "{{ repos_dir }}/{{ app_name }}"
+  args:
+    executable: /bin/bash
+  register: migration_log
+  changed_when: false
+
+- name: Display migration results
+  ansible.builtin.debug:
+    msg: |
+      Migration branch: {{ migration_branch }}
+      Commits:
+      {{ migration_log.stdout }}

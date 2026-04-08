@@ -1,0 +1,20 @@
+---
+# Copy this file to vault.yml and fill in your credentials:
+#   cp vault.yml.example vault.yml
+#   # edit vault.yml with your values
+#   ansible-vault encrypt vault.yml
+goose_provider: "gcp_vertex_ai"
+goose_model: "claude-opus-4-6"
+gcp_project_id: "CHANGEME"
+gcp_location: "us-east5"
+# The JSON content should match your ~/.config/gcloud/application_default_credentials.json
+gcp_service_account_key: |
+  {
+    "account": "",
+    "client_id": "CHANGEME",
+    "client_secret": "CHANGEME",
+    "quota_project_id": "CHANGEME",
+    "refresh_token": "CHANGEME",
+    "type": "authorized_user",
+    "universe_domain": "googleapis.com"
+  }

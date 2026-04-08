@@ -1,0 +1,43 @@
+---
+- name: Check if semver rules already exist
+  ansible.builtin.stat:
+    path: "{{ outputs_dir }}/semver_rules/breaking-changes.yaml"
+  register: semver_rules_exist
+
+- name: Clean existing rules for regeneration
+  ansible.builtin.file:
+    path: "{{ outputs_dir }}/semver_rules"
+    state: absent
+  when: not semver_rules_exist.stat.exists or (force_rerun | default(false) | bool)
+
+- name: Recreate semver_rules directory
+  ansible.builtin.file:
+    path: "{{ outputs_dir }}/semver_rules"
+    state: directory
+    mode: "0755"
+  when: not semver_rules_exist.stat.exists or (force_rerun | default(false) | bool)
+
+- name: Generate semver rules
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.cargo/env &&
+      ./semver-analyzer konveyor typescript
+      --rename-patterns {{ repos_dir }}/semver-analyzer/hack/integration/patternfly-token-mappings.yaml
+      --from-report {{ outputs_dir }}/semver_report.json
+      --output-dir {{ outputs_dir }}/semver_rules
+    chdir: "{{ workspace_dir }}"
+  args:
+    executable: /bin/bash
+  when: not semver_rules_exist.stat.exists or (force_rerun | default(false) | bool)
+
+- name: Verify rules were generated
+  ansible.builtin.stat:
+    path: "{{ outputs_dir }}/semver_rules/ruleset.yaml"
+  register: ruleset_verify
+  failed_when: not ruleset_verify.stat.exists
+
+- name: Verify fix-strategies were generated
+  ansible.builtin.stat:
+    path: "{{ outputs_dir }}/fix-guidance/fix-strategies.json"
+  register: strategies_verify
+  failed_when: not strategies_verify.stat.exists

@@ -1,0 +1,20 @@
+[
+    {
+        "name": "frontend",
+        "address": "localhost:{{ frontend_provider_port }}",
+        "initConfig": [
+            {
+                "analysisMode": "source-only",
+                "location": "{{ repos_dir }}/{{ app_name }}"
+            }
+        ]
+    },
+    {
+        "name": "builtin",
+        "initConfig": [
+            {
+                "location": "{{ repos_dir }}/{{ app_name }}"
+            }
+        ]
+    }
+]

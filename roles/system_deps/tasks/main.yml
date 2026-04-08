@@ -1,0 +1,41 @@
+---
+- name: Check currently layered packages
+  ansible.builtin.command:
+    cmd: rpm-ostree status --json
+  register: ostree_status
+  changed_when: false
+
+- name: Determine which packages need installation
+  ansible.builtin.set_fact:
+    packages_to_install: >-
+      {{ system_packages | difference(
+           (ostree_status.stdout | from_json).deployments[0].get('requested-packages', [])
+         )
+      }}
+
+- name: Layer system packages via rpm-ostree
+  ansible.builtin.command:
+    cmd: "rpm-ostree install --idempotent --allow-inactive {{ packages_to_install | join(' ') }}"
+  become: true
+  when: packages_to_install | length > 0
+  register: rpm_ostree_result
+
+- name: Reboot after rpm-ostree install
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+    msg: "Rebooting after rpm-ostree package layering"
+  become: true
+  when:
+    - rpm_ostree_result is changed
+
+- name: Wait for system to come back after reboot
+  ansible.builtin.wait_for_connection:
+    timeout: 120
+  when:
+    - rpm_ostree_result is changed
+
+- name: Ensure ~/.local/bin exists
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.local/bin"
+    state: directory
+    mode: "0755"

@@ -1,0 +1,66 @@
+---
+- name: Install nvm
+  ansible.builtin.shell:
+    cmd: >-
+      curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+  args:
+    creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
+    executable: /bin/bash
+
+- name: Check if Node.js {{ node_version }} is installed
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.nvm/nvm.sh &&
+      nvm ls {{ node_version }} 2>/dev/null | grep -q "{{ node_version }}"
+  args:
+    executable: /bin/bash
+  register: node_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Node.js {{ node_version }}
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.nvm/nvm.sh &&
+      nvm install {{ node_version }}
+  args:
+    executable: /bin/bash
+  when: node_check.rc != 0
+
+- name: Set Node.js {{ node_version }} as default
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.nvm/nvm.sh &&
+      nvm alias default {{ node_version }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Enable corepack
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.nvm/nvm.sh &&
+      nvm exec {{ node_version }} corepack enable
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Install yarn via corepack
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.nvm/nvm.sh &&
+      nvm exec {{ node_version }} corepack prepare yarn@stable --activate
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Install additional npm packages
+  ansible.builtin.shell:
+    cmd: >-
+      source {{ ansible_env.HOME }}/.nvm/nvm.sh &&
+      nvm exec {{ node_version }} npm install -g
+      {{ item.name }}{% if item.version is defined and item.version != 'latest' %}@{{ item.version }}{% endif %}
+  args:
+    executable: /bin/bash
+  loop: "{{ npm_packages }}"
+  when: npm_packages | length > 0
