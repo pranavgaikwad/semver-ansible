@@ -25,6 +25,7 @@
       --rename-patterns {{ repos_dir }}/semver-analyzer/hack/integration/patternfly-token-mappings.yaml
       --from-report {{ outputs_dir }}/semver_report.json
       --output-dir {{ outputs_dir }}/semver_rules
+      --pipeline-v2
     chdir: "{{ workspace_dir }}"
   args:
     executable: /bin/bash

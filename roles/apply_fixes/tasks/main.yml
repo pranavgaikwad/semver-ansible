@@ -22,7 +22,7 @@
   ansible.builtin.shell:
     cmd: >-
       ./frontend-analyzer-provider fix {{ repos_dir }}/{{ app_name }}
-      --strategies {{ outputs_dir }}/fix-guidance/fix-strategies.json
+      --rules-strategies {{ repos_dir }}/frontend-analyzer-provider/rules/patternfly-v5-to-v6/fix-strategies.json
       --input {{ outputs_dir }}/{{ app_name }}/kantra/output.json
       --apply
     chdir: "{{ workspace_dir }}"
@@ -51,7 +51,7 @@
       --apply
       --llm-provider goose
       --llm-timeout={{ llm_timeout }}
-      --strategies {{ outputs_dir }}/fix-guidance/fix-strategies.json
+      --rules-strategies {{ repos_dir }}/frontend-analyzer-provider/rules/patternfly-v5-to-v6/fix-strategies.json
     chdir: "{{ workspace_dir }}"
   args:
     executable: /bin/bash
