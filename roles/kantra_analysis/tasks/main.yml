@@ -45,8 +45,6 @@
       --rules {{ outputs_dir }}/semver_rules
       --override-provider-settings {{ workspace_dir }}/provider_settings.json
       --enable-default-rulesets=false
-      --no-dependency-rules
-      --mode source-only
       --run-local
       --overwrite
     chdir: "{{ workspace_dir }}"
@@ -66,6 +64,15 @@
 
 - name: Verify kantra output exists
   ansible.builtin.stat:
-    path: "{{ outputs_dir }}/{{ app_name }}/kantra/output.json"
+    path: "{{ outputs_dir }}/{{ app_name }}/kantra/output.yaml"
   register: kantra_output
   failed_when: not kantra_output.stat.exists
+
+- name: Convert kantra output from YAML to JSON
+  ansible.builtin.shell:
+    cmd: >-
+      python3 -c "import yaml, json, sys;
+      data = yaml.safe_load(open('{{ outputs_dir }}/{{ app_name }}/kantra/output.yaml'));
+      json.dump(data, open('{{ outputs_dir }}/{{ app_name }}/kantra/output.json', 'w'), indent=2)"
+  args:
+    executable: /bin/bash
