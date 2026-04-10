@@ -1,8 +1,18 @@
 ---
+- name: Derive app name from app_path
+  ansible.builtin.set_fact:
+    app_name: "{{ app_path | basename }}"
+  when: app_name is not defined and app_path is defined
+
 - name: Derive app name from repo URL
   ansible.builtin.set_fact:
     app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
-  when: app_name is not defined
+  when: app_name is not defined and app_repo_url is defined
+
+- name: Set app_path from repos_dir
+  ansible.builtin.set_fact:
+    app_path: "{{ repos_dir }}/{{ app_name }}"
+  when: app_path is not defined
 
 - name: Create workspace directories
   ansible.builtin.file:
@@ -18,14 +28,14 @@
 
 - name: Symlink semver-analyzer binary
   ansible.builtin.file:
-    src: "{{ repos_dir }}/semver-analyzer/target/release/semver-analyzer"
+    src: "{{ semver_analyzer_path }}/target/release/semver-analyzer"
     dest: "{{ workspace_dir }}/semver-analyzer"
     state: link
     force: true
 
 - name: Symlink frontend-analyzer-provider binary
   ansible.builtin.file:
-    src: "{{ repos_dir }}/frontend-analyzer-provider/target/release/frontend-analyzer-provider"
+    src: "{{ frontend_provider_path }}/target/release/frontend-analyzer-provider"
     dest: "{{ workspace_dir }}/frontend-analyzer-provider"
     state: link
     force: true

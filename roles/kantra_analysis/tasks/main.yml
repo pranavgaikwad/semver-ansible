@@ -1,15 +1,24 @@
 ---
+- name: Derive app name from app_path
+  ansible.builtin.set_fact:
+    app_name: "{{ app_path | basename }}"
+  when: app_name is not defined and app_path is defined
+
 - name: Derive app name from repo URL
   ansible.builtin.set_fact:
     app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
-  when: app_name is not defined
+  when: app_name is not defined and app_repo_url is defined
 
-- name: Check if frontend-analyzer-provider is already running
+- name: Set app_path from repos_dir
+  ansible.builtin.set_fact:
+    app_path: "{{ repos_dir }}/{{ app_name }}"
+  when: app_path is not defined
+
+- name: Kill any existing frontend-analyzer-provider
   ansible.builtin.shell:
-    cmd: "pgrep -f 'frontend-analyzer-provider serve' || true"
+    cmd: "pkill frontend-analyzer-provider || true"
   args:
     executable: /bin/bash
-  register: fap_running
   changed_when: false
 
 - name: Start frontend-analyzer-provider in background
@@ -22,12 +31,10 @@
   args:
     executable: /bin/bash
   register: fap_pid
-  when: fap_running.stdout | trim == ""
 
 - name: Record provider PID
   ansible.builtin.set_fact:
     frontend_provider_pid: "{{ fap_pid.stdout | trim }}"
-  when: fap_pid is changed
 
 - name: Wait for frontend-analyzer-provider to be ready
   ansible.builtin.wait_for:
@@ -38,9 +45,10 @@
   ansible.builtin.shell:
     cmd: >-
       export PATH="{{ ansible_env.HOME }}/.kantra:{{ ansible_env.HOME }}/.local/bin:$PATH" &&
+      export JAVA_HOME=$(readlink -f /usr/lib/jvm/java) &&
       kantra analyze
       --provider java
-      --input {{ repos_dir }}/{{ app_name }}
+      --input {{ app_path }}
       --output {{ outputs_dir }}/{{ app_name }}/kantra
       --rules {{ outputs_dir }}/semver_rules
       --override-provider-settings {{ workspace_dir }}/provider_settings.json
@@ -57,7 +65,7 @@
   ansible.builtin.shell:
     cmd: >-
       kill {{ frontend_provider_pid | default('') }} 2>/dev/null ||
-      pkill -f 'frontend-analyzer-provider serve' || true
+      pkill frontend-analyzer-provider || true
   args:
     executable: /bin/bash
   changed_when: false

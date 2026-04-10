@@ -1,8 +1,13 @@
 ---
+- name: Derive app name from app_path
+  ansible.builtin.set_fact:
+    app_name: "{{ app_path | basename }}"
+  when: app_name is not defined and app_path is defined
+
 - name: Derive app name from repo URL
   ansible.builtin.set_fact:
     app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
-  when: app_name is not defined
+  when: app_name is not defined and app_repo_url is defined
 
 - name: Check if semver report already exists
   ansible.builtin.stat:
@@ -16,20 +21,21 @@
       source {{ ansible_env.HOME }}/.cargo/env &&
       export PATH="{{ ansible_env.HOME }}/.local/bin:$PATH" &&
       export YARN_ENABLE_SCRIPTS=false &&
-      ./semver-analyzer analyze typescript
-      --dep-build-command "source ~/.nvm/nvm.sh && nvm exec {{ node_version }} bash -c 'export NODE_ENV=development && yarn install && npx gulp buildPatternfly'"
-      --repo {{ repos_dir }}/patternfly-react
-      --from {{ patternfly_from_version }}
-      --to {{ patternfly_to_version }}
-      --dep-repo {{ repos_dir }}/patternfly
-      --dep-from {{ patternfly_from_version }}
-      --dep-to {{ patternfly_to_version }}
-      --pipeline-v2
-      --llm-command "goose run --no-session -q -t"
-      --llm-all-files
-      --llm-timeout {{ llm_timeout }}
+      ./semver-analyzer analyze {{ language }}
+      --repo {{ semver_analyze_repo_path }}
+      --from {{ from_ref }}
+      --to {{ to_ref }}
+      --dep-repo {{ semver_analyze_dep_repo_path }}
+      --dep-from {{ dep_from_ref }}
+      --dep-to {{ dep_to_ref }}
+      --dep-build-command "{{ dep_build_command }}"
+      --build-command '{{ build_command }}'
+      {% if pipeline_v2 | bool %}--pipeline-v2{% endif %}
+      {% if no_llm | bool %}--no-llm{% endif %}
+      {% if not (no_llm | bool) %}--llm-command "{{ llm_command }}"{% endif %}
+      {% if not (no_llm | bool) and (llm_all_files | bool) %}--llm-all-files{% endif %}
+      {% if not (no_llm | bool) %}--llm-timeout {{ llm_timeout }}{% endif %}
       -o {{ outputs_dir }}/semver_report.json
-      --build-command 'corepack yarn build'
     chdir: "{{ workspace_dir }}"
   args:
     executable: /bin/bash

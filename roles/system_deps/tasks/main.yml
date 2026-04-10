@@ -1,9 +1,15 @@
 ---
+- name: Skip system deps in local mode
+  ansible.builtin.debug:
+    msg: "Skipping system deps in local mode — ensure prerequisites are installed"
+  when: run_mode == 'local'
+
 - name: Check currently layered packages
   ansible.builtin.command:
     cmd: rpm-ostree status --json
   register: ostree_status
   changed_when: false
+  when: run_mode == 'vm'
 
 - name: Determine which packages need installation
   ansible.builtin.set_fact:
@@ -12,12 +18,13 @@
            (ostree_status.stdout | from_json).deployments[0].get('requested-packages', [])
          )
       }}
+  when: run_mode == 'vm'
 
 - name: Layer system packages via rpm-ostree
   ansible.builtin.command:
     cmd: "rpm-ostree install --idempotent --allow-inactive {{ packages_to_install | join(' ') }}"
   become: true
-  when: packages_to_install | length > 0
+  when: run_mode == 'vm' and packages_to_install | length > 0
   register: rpm_ostree_result
 
 - name: Reboot after rpm-ostree install
@@ -26,12 +33,14 @@
     msg: "Rebooting after rpm-ostree package layering"
   become: true
   when:
+    - run_mode == 'vm'
     - rpm_ostree_result is changed
 
 - name: Wait for system to come back after reboot
   ansible.builtin.wait_for_connection:
     timeout: 120
   when:
+    - run_mode == 'vm'
     - rpm_ostree_result is changed
 
 - name: Ensure ~/.local/bin exists

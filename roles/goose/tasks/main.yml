@@ -23,6 +23,7 @@
     path: "{{ gcp_credentials_dest | dirname }}"
     state: directory
     mode: "0700"
+  when: run_mode == 'vm'
 
 - name: Write GCP service account key
   ansible.builtin.copy:
@@ -30,3 +31,4 @@
     dest: "{{ gcp_credentials_dest }}"
     mode: "0600"
   no_log: true
+  when: run_mode == 'vm'

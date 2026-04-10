@@ -1,5 +1,5 @@
 ---
-- name: Provision podman machine
+- name: Provision target host
   hosts: localhost
   connection: local
   gather_facts: true
@@ -8,7 +8,7 @@
     - role: podman_vm
 
 - name: Run semver-analyzer migration pipeline
-  hosts: podman_vm
+  hosts: pipeline_host
   gather_facts: true
   become: false
   environment:

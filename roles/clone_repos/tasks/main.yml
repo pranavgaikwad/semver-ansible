@@ -1,79 +1,100 @@
 ---
+- name: Skip clone in local mode
+  ansible.builtin.debug:
+    msg: "Skipping repo cloning in local mode — using pre-configured paths"
+  when: run_mode == 'local'
+
 - name: Validate app_repo_url is defined
   ansible.builtin.assert:
     that:
       - app_repo_url is defined
       - app_repo_url | length > 0
-    fail_msg: "app_repo_url must be set. Pass it with -e app_repo_url=https://..."
+    fail_msg: "app_repo_url must be set in VM mode"
+  when: run_mode == 'vm'
 
 - name: Derive app name from repo URL
   ansible.builtin.set_fact:
     app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
+  when: run_mode == 'vm'
+
+- name: Set app_path for VM mode
+  ansible.builtin.set_fact:
+    app_path: "{{ repos_dir }}/{{ app_name }}"
+  when: run_mode == 'vm'
 
 - name: Create repos directory
   ansible.builtin.file:
     path: "{{ repos_dir }}"
     state: directory
     mode: "0755"
+  when: run_mode == 'vm'
 
-- name: Clone patternfly-react
+- name: Clone analyze repo
   ansible.builtin.git:
     repo: "{{ patternfly_react_repo }}"
-    dest: "{{ repos_dir }}/patternfly-react"
-    version: "{{ patternfly_to_version }}"
+    dest: "{{ semver_analyze_repo_path }}"
+    version: "{{ to_ref }}"
     clone: true
     update: true
+  when: run_mode == 'vm'
 
-- name: Fetch patternfly-react from-version tag
+- name: Fetch analyze repo from-version tag
   ansible.builtin.command:
-    cmd: "git fetch origin refs/tags/{{ patternfly_from_version }}:refs/tags/{{ patternfly_from_version }}"
-    chdir: "{{ repos_dir }}/patternfly-react"
+    cmd: "git fetch origin refs/tags/{{ from_ref }}:refs/tags/{{ from_ref }}"
+    chdir: "{{ semver_analyze_repo_path }}"
   changed_when: false
   failed_when: false
+  when: run_mode == 'vm'
 
-- name: Clone patternfly
+- name: Clone analyze dep repo
   ansible.builtin.git:
     repo: "{{ patternfly_repo }}"
-    dest: "{{ repos_dir }}/patternfly"
-    version: "{{ patternfly_to_version }}"
+    dest: "{{ semver_analyze_dep_repo_path }}"
+    version: "{{ dep_to_ref }}"
     clone: true
     update: true
+  when: run_mode == 'vm'
 
-- name: Fetch patternfly from-version tag
+- name: Fetch analyze dep repo from-version tag
   ansible.builtin.command:
-    cmd: "git fetch origin refs/tags/{{ patternfly_from_version }}:refs/tags/{{ patternfly_from_version }}"
-    chdir: "{{ repos_dir }}/patternfly"
+    cmd: "git fetch origin refs/tags/{{ dep_from_ref }}:refs/tags/{{ dep_from_ref }}"
+    chdir: "{{ semver_analyze_dep_repo_path }}"
   changed_when: false
   failed_when: false
+  when: run_mode == 'vm'
 
 - name: Clone konveyor-core
   ansible.builtin.git:
     repo: "{{ konveyor_core_repo }}"
-    dest: "{{ repos_dir }}/konveyor-core"
+    dest: "{{ konveyor_core_path }}"
     version: main
     clone: true
     update: true
+  when: run_mode == 'vm'
 
 - name: Clone semver-analyzer
   ansible.builtin.git:
     repo: "{{ semver_analyzer_repo }}"
-    dest: "{{ repos_dir }}/semver-analyzer"
+    dest: "{{ semver_analyzer_path }}"
     version: main
     clone: true
     update: true
+  when: run_mode == 'vm'
 
 - name: Clone frontend-analyzer-provider
   ansible.builtin.git:
     repo: "{{ frontend_provider_repo }}"
-    dest: "{{ repos_dir }}/frontend-analyzer-provider"
+    dest: "{{ frontend_provider_path }}"
     version: main
     clone: true
     update: true
+  when: run_mode == 'vm'
 
 - name: Clone user application repo
   ansible.builtin.git:
     repo: "{{ app_repo_url }}"
-    dest: "{{ repos_dir }}/{{ app_name }}"
+    dest: "{{ app_path }}"
     version: "{{ app_repo_branch }}"
     clone: true
     update: true
+  when: run_mode == 'vm'

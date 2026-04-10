@@ -1,8 +1,18 @@
 ---
+- name: Derive app name from app_path
+  ansible.builtin.set_fact:
+    app_name: "{{ app_path | basename }}"
+  when: app_name is not defined and app_path is defined
+
 - name: Derive app name from repo URL
   ansible.builtin.set_fact:
     app_name: "{{ app_repo_url | basename | regex_replace('\\.git$', '') }}"
-  when: app_name is not defined
+  when: app_name is not defined and app_repo_url is defined
+
+- name: Set app_path from repos_dir
+  ansible.builtin.set_fact:
+    app_path: "{{ repos_dir }}/{{ app_name }}"
+  when: app_path is not defined
 
 - name: Generate migration branch name
   ansible.builtin.set_fact:
@@ -11,18 +21,18 @@
 - name: Create migration branch
   ansible.builtin.command:
     cmd: "git checkout -b {{ migration_branch }}"
-    chdir: "{{ repos_dir }}/{{ app_name }}"
+    chdir: "{{ app_path }}"
 
 - name: Reset migration branch to base
   ansible.builtin.command:
     cmd: "git reset --hard {{ app_repo_branch }}"
-    chdir: "{{ repos_dir }}/{{ app_name }}"
+    chdir: "{{ app_path }}"
 
 - name: Apply pattern-based fixes
   ansible.builtin.shell:
     cmd: >-
-      ./frontend-analyzer-provider fix {{ repos_dir }}/{{ app_name }}
-      --rules-strategies {{ repos_dir }}/frontend-analyzer-provider/rules/patternfly-v5-to-v6/fix-strategies.json
+      ./frontend-analyzer-provider fix {{ app_path }}
+      --rules-strategies {{ frontend_provider_path }}/rules/patternfly-v5-to-v6/fix-strategies.json
       --input {{ outputs_dir }}/{{ app_name }}/kantra/output.json
       --apply
     chdir: "{{ workspace_dir }}"
@@ -36,7 +46,7 @@
     cmd: |
       git add -A
       git diff --cached --quiet && echo "no changes" || git commit -s -m "Apply pattern-based migration fixes (semver-analyzer)"
-    chdir: "{{ repos_dir }}/{{ app_name }}"
+    chdir: "{{ app_path }}"
   args:
     executable: /bin/bash
   register: pattern_commit
@@ -46,33 +56,35 @@
   ansible.builtin.shell:
     cmd: >-
       export PATH="{{ ansible_env.HOME }}/.local/bin:$PATH" &&
-      ./frontend-analyzer-provider fix {{ repos_dir }}/{{ app_name }}
+      ./frontend-analyzer-provider fix {{ app_path }}
       --input {{ outputs_dir }}/{{ app_name }}/kantra/output.json
       --apply
       --llm-provider goose
       --llm-timeout={{ llm_timeout }}
-      --rules-strategies {{ repos_dir }}/frontend-analyzer-provider/rules/patternfly-v5-to-v6/fix-strategies.json
+      --rules-strategies {{ frontend_provider_path }}/rules/patternfly-v5-to-v6/fix-strategies.json
     chdir: "{{ workspace_dir }}"
   args:
     executable: /bin/bash
   async: 3600
   poll: 15
+  when: not (no_llm | bool)
 
 - name: Stage and commit LLM-based fixes
   ansible.builtin.shell:
     cmd: |
       git add -A
       git diff --cached --quiet && echo "no changes" || git commit -s -m "Apply LLM-based migration fixes (semver-analyzer + goose)"
-    chdir: "{{ repos_dir }}/{{ app_name }}"
+    chdir: "{{ app_path }}"
   args:
     executable: /bin/bash
   register: llm_commit
   changed_when: "'no changes' not in llm_commit.stdout"
+  when: not (no_llm | bool)
 
 - name: Show migration summary
   ansible.builtin.shell:
     cmd: "git log --oneline {{ app_repo_branch }}..HEAD"
-    chdir: "{{ repos_dir }}/{{ app_name }}"
+    chdir: "{{ app_path }}"
   args:
     executable: /bin/bash
   register: migration_log

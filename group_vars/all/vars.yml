@@ -1,47 +1,68 @@
 ---
-# PatternFly versions
-patternfly_from_version: "v5.4.0"
-patternfly_to_version: "v6.4.1"
+# Run mode: "vm" creates a podman machine; "local" runs on the host directly
+run_mode: "vm"
 
-# Application repo (required — pass via -e app_repo_url=https://...)
-# app_repo_url: ""
+# semver-analyzer analyze options (mirrors CLI flags)
+language: "typescript"
+from_ref: "v5.4.0"
+to_ref: "v6.4.1"
+dep_from_ref: "v5.4.0"
+dep_to_ref: "v6.4.0"
+build_command: "corepack yarn build"
+dep_build_command: "source ~/.nvm/nvm.sh && nvm exec {{ node_version }} bash -c 'export NODE_ENV=development && yarn install && npx gulp buildPatternfly'"
+pipeline_v2: true
+no_llm: true
+llm_command: "goose run --no-session -q -t"
+llm_all_files: true
+llm_timeout: 300
+
+# semver-analyzer konveyor options
+rename_patterns: "{{ semver_analyzer_path }}/hack/integration/patternfly-token-mappings.yaml"
+
+# Application
 app_repo_branch: "main"
 
 # Node.js
 node_version: "20.11.0"
 npm_packages: []
-# Example:
-#   - { name: "typescript", version: "5.3.3" }
-#   - { name: "gulp-cli", version: "latest" }
 
-# VM configuration
+# VM configuration (only used when run_mode=vm)
 vm_name: "semver-pipeline"
 vm_cpus: 6
 vm_memory: 8192
 vm_disk_size: 100
 
 # Kantra
-kantra_version: "latest"
+kantra_release_version: "v0.9.1"
+kantra_image: "quay.io/konveyor/kantra:latest"
 
 # Goose / LLM (GCP Vertex AI)
 # goose_provider, goose_model, gcp_project_id, gcp_location are in vault.yml
-gcp_credentials_dest: "/home/core/.config/gcloud/service-account-key.json"
-llm_timeout: 300
+gcp_credentials_dest: "{{ ansible_env.HOME }}/.config/gcloud/application_default_credentials.json"
 
-# Paths inside VM
-base_dir: "/home/core/pipeline"
-repos_dir: "{{ base_dir }}/repos"
+# Paths
 workspace_dir: "{{ base_dir }}/workspace"
 outputs_dir: "{{ workspace_dir }}/outputs"
 
-# Repo URLs
+# Repo paths — override these in local mode to point to existing checkouts
+semver_analyze_repo_path: "{{ repos_dir }}/patternfly-react"
+semver_analyze_dep_repo_path: "{{ repos_dir }}/patternfly"
+semver_analyzer_path: "{{ repos_dir }}/semver-analyzer"
+frontend_provider_path: "{{ repos_dir }}/frontend-analyzer-provider"
+konveyor_core_path: "{{ repos_dir }}/konveyor-core"
+
+# VM-mode defaults (used by clone_repos)
+base_dir: "/home/core/pipeline"
+repos_dir: "{{ base_dir }}/repos"
+
+# Repo URLs (only used when run_mode=vm, by clone_repos role)
 patternfly_react_repo: "https://github.com/patternfly/patternfly-react.git"
 patternfly_repo: "https://github.com/patternfly/patternfly.git"
 konveyor_core_repo: "https://github.com/shawn-hurley/konveyor-core.git"
 semver_analyzer_repo: "https://github.com/shawn-hurley/semver-analyzer.git"
 frontend_provider_repo: "https://github.com/shawn-hurley/frontend-analyzer-provider.git"
 
-# System packages to layer via rpm-ostree on Fedora CoreOS
+# System packages to layer via rpm-ostree (VM only)
 system_packages:
   - gcc
   - gcc-c++
@@ -51,6 +72,7 @@ system_packages:
   - bzip2
   - cmake
   - unzip
+  - maven
 
 # Frontend analyzer provider
 frontend_provider_port: 9002

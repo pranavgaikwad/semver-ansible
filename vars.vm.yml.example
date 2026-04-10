@@ -1,0 +1,19 @@
+---
+run_mode: "vm"
+
+# Application to migrate (required)
+app_repo_url: "https://github.com/your-org/your-app.git"
+app_repo_branch: "main"
+
+# semver-analyzer analyze options
+language: "typescript"
+from_ref: "v5.4.0"
+to_ref: "v6.4.1"
+dep_from_ref: "v5.4.0"
+dep_to_ref: "v6.4.0"
+
+# VM resources
+vm_name: "semver-pipeline"
+vm_cpus: 6
+vm_memory: 8192
+vm_disk_size: 100

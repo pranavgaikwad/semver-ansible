@@ -21,11 +21,11 @@
   ansible.builtin.shell:
     cmd: >-
       source {{ ansible_env.HOME }}/.cargo/env &&
-      ./semver-analyzer konveyor typescript
-      --rename-patterns {{ repos_dir }}/semver-analyzer/hack/integration/patternfly-token-mappings.yaml
+      ./semver-analyzer konveyor {{ language }}
+      --rename-patterns {{ rename_patterns }}
       --from-report {{ outputs_dir }}/semver_report.json
       --output-dir {{ outputs_dir }}/semver_rules
-      --pipeline-v2
+      {% if pipeline_v2 | bool %}--pipeline-v2{% endif %}
     chdir: "{{ workspace_dir }}"
   args:
     executable: /bin/bash

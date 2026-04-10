@@ -1,0 +1,25 @@
+---
+run_mode: "local"
+
+# Application to migrate (required)
+app_name: "my-app"
+app_path: "/path/to/my-app"
+app_repo_branch: "main"
+
+# semver-analyzer analyze options
+language: "typescript"
+from_ref: "v5.4.0"
+to_ref: "v6.4.1"
+dep_from_ref: "v5.4.0"
+dep_to_ref: "v6.4.0"
+
+# Repo paths — point to your local checkouts
+semver_analyze_repo_path: "/path/to/patternfly-react"
+semver_analyze_dep_repo_path: "/path/to/patternfly"
+semver_analyzer_path: "/path/to/semver-analyzer"
+frontend_provider_path: "/path/to/frontend-analyzer-provider"
+konveyor_core_path: "/path/to/konveyor-core"
+
+# Workspace and outputs
+workspace_dir: "/path/to/workspace"
+outputs_dir: "{{ workspace_dir }}/outputs"

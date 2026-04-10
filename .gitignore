@@ -4,6 +4,10 @@
 # Encrypted vault (contains secrets even when encrypted)
 group_vars/all/vault.yml
 
+# User config files
+vars.vm.yml
+vars.local.yml
+
 # Ansible retry files
 *.retry
 

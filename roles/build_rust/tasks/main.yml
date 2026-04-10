@@ -4,7 +4,7 @@
     cmd: >-
       source {{ ansible_env.HOME }}/.cargo/env &&
       cargo build --release
-    chdir: "{{ repos_dir }}/semver-analyzer"
+    chdir: "{{ semver_analyzer_path }}"
   args:
     executable: /bin/bash
   register: semver_build
@@ -12,7 +12,7 @@
 
 - name: Verify semver-analyzer binary
   ansible.builtin.stat:
-    path: "{{ repos_dir }}/semver-analyzer/target/release/semver-analyzer"
+    path: "{{ semver_analyzer_path }}/target/release/semver-analyzer"
   register: semver_binary
   failed_when: not semver_binary.stat.exists
 
@@ -21,7 +21,7 @@
     cmd: >-
       source {{ ansible_env.HOME }}/.cargo/env &&
       cargo build --release
-    chdir: "{{ repos_dir }}/frontend-analyzer-provider"
+    chdir: "{{ frontend_provider_path }}"
   args:
     executable: /bin/bash
   register: fap_build
@@ -29,6 +29,6 @@
 
 - name: Verify frontend-analyzer-provider binary
   ansible.builtin.stat:
-    path: "{{ repos_dir }}/frontend-analyzer-provider/target/release/frontend-analyzer-provider"
+    path: "{{ frontend_provider_path }}/target/release/frontend-analyzer-provider"
   register: fap_binary
   failed_when: not fap_binary.stat.exists
