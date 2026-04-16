@@ -1,34 +1,33 @@
 This application has been migrated from PatternFly 5 to PatternFly 6 using automated tools. Pattern-based and LLM-assisted fixes have already been applied. Your job is to get the application into a building and working state.
 
-## Step 1: Build
+## Step 1: Build and collect all errors
 
-Run the application's build command. Identify all compilation and type errors.
+Run the application's build command. Collect the FULL list of compilation and type errors.
 
-## Step 2: Fix build errors
+## Step 2: Group errors
 
-Fix each build error. Common issues after automated migration:
-- Missing or incorrect imports
-- Type mismatches from renamed interfaces or changed signatures
-- Removed props still being used
-- Changed component composition patterns (e.g., children vs slots)
+Use your best judgement to group the errors by root cause. Group errors together logically.
+
+## Step 3: Fix errors in batches by groups
+
+For each group of errors, research the correct fix ONCE, then apply it across ALL affected files before moving on to the next category. Do NOT run the build after every single file change.
 
 When fixing errors, consult the PatternFly 6 API docs if needed:
 - https://www.patternfly.org/get-started/upgrade/
 
-Do not guess at fixes. If a component API has changed and you are unsure of the correct replacement, look it up.
+## Step 4: Verify build
 
-## Step 3: Fix tests
+After fixing ALL categories, run the build again. If new errors appear, repeat steps 2-4. Aim to get to a clean build in 2-3 iterations.
 
-After the build succeeds, run the test suite. Fix any test failures caused by the migration. Tests may fail due to:
-- Changed component output or structure
-- Updated CSS class names in snapshots
-- Modified prop APIs in test assertions
+## Step 5: Fix tests
+
+After the build succeeds, run the test suite. Apply the same batch approach: collect all failures, group by cause, fix in batches, then re-run.
 
 Update snapshots if the new output is correct.
 
 ## Important
 
 - Do not refactor, improve, or add features. Only fix what is broken.
-- Do not add comments or documentation changes.
 - Do not modify code that already builds and passes tests.
 - Make minimal, targeted fixes.
+- Do NOT run the build after every file change. Fix a whole category first, then build.
