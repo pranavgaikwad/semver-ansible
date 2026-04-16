@@ -20,11 +20,14 @@
 - name: Generate semver rules
   ansible.builtin.shell:
     cmd: >-
-      source {{ ansible_env.HOME }}/.cargo/env &&
+      [ -f {{ ansible_env.HOME }}/.cargo/env ] && source {{ ansible_env.HOME }}/.cargo/env;
+
       ./semver-analyzer konveyor {{ language }}
       --rename-patterns {{ rename_patterns }}
       --from-report {{ outputs_dir }}/semver_report.json
       --output-dir {{ outputs_dir }}/semver_rules
+      --log-file {{ outputs_dir }}/semver_konveyor.log
+      --log-level info
       {% if pipeline_v2 | bool %}--pipeline-v2{% endif %}
     chdir: "{{ workspace_dir }}"
   args:

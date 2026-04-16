@@ -9,7 +9,7 @@
 - name: Install stable toolchain
   ansible.builtin.shell:
     cmd: >-
-      source {{ ansible_env.HOME }}/.cargo/env &&
+      [ -f {{ ansible_env.HOME }}/.cargo/env ] && source {{ ansible_env.HOME }}/.cargo/env;
       rustup toolchain install stable
   args:
     executable: /bin/bash
@@ -19,7 +19,7 @@
 - name: Set stable as default
   ansible.builtin.shell:
     cmd: >-
-      source {{ ansible_env.HOME }}/.cargo/env &&
+      [ -f {{ ansible_env.HOME }}/.cargo/env ] && source {{ ansible_env.HOME }}/.cargo/env;
       rustup default stable
   args:
     executable: /bin/bash

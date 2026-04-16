@@ -17,10 +17,10 @@
 - name: Run semver-analyzer analyze
   ansible.builtin.shell:
     cmd: >-
-      source {{ ansible_env.HOME }}/.nvm/nvm.sh &&
-      source {{ ansible_env.HOME }}/.cargo/env &&
+      [ -f {{ ansible_env.HOME }}/.nvm/nvm.sh ] && source {{ ansible_env.HOME }}/.nvm/nvm.sh;
+      [ -f {{ ansible_env.HOME }}/.cargo/env ] && source {{ ansible_env.HOME }}/.cargo/env;
       export PATH="{{ ansible_env.HOME }}/.local/bin:$PATH" &&
-      export YARN_ENABLE_SCRIPTS=false &&
+      {% if not (yarn_enable_scripts | bool) %}export YARN_ENABLE_SCRIPTS=false &&{% endif %}
       ./semver-analyzer analyze {{ language }}
       --repo {{ semver_analyze_repo_path }}
       --from {{ from_ref }}
@@ -35,6 +35,8 @@
       {% if not (no_llm | bool) %}--llm-command "{{ llm_command }}"{% endif %}
       {% if not (no_llm | bool) and (llm_all_files | bool) %}--llm-all-files{% endif %}
       {% if not (no_llm | bool) %}--llm-timeout {{ llm_timeout }}{% endif %}
+      --log-file {{ outputs_dir }}/semver_analyze.log
+      --log-level info
       -o {{ outputs_dir }}/semver_report.json
     chdir: "{{ workspace_dir }}"
   args:

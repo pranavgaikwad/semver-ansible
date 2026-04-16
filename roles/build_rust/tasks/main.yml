@@ -2,7 +2,7 @@
 - name: Build semver-analyzer (release)
   ansible.builtin.shell:
     cmd: >-
-      source {{ ansible_env.HOME }}/.cargo/env &&
+      [ -f {{ ansible_env.HOME }}/.cargo/env ] && source {{ ansible_env.HOME }}/.cargo/env;
       cargo build --release
     chdir: "{{ semver_analyzer_path }}"
   args:
@@ -19,7 +19,7 @@
 - name: Build frontend-analyzer-provider (release)
   ansible.builtin.shell:
     cmd: >-
-      source {{ ansible_env.HOME }}/.cargo/env &&
+      [ -f {{ ansible_env.HOME }}/.cargo/env ] && source {{ ansible_env.HOME }}/.cargo/env;
       cargo build --release
     chdir: "{{ frontend_provider_path }}"
   args:

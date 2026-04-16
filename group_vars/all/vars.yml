@@ -15,9 +15,21 @@ no_llm: true
 llm_command: "goose run --no-session -q -t"
 llm_all_files: true
 llm_timeout: 300
+yarn_enable_scripts: false
 
 # semver-analyzer konveyor options
 rename_patterns: "{{ semver_analyzer_path }}/hack/integration/patternfly-token-mappings.yaml"
+
+# kantra analyze options
+kantra_provider: "java"
+kantra_enable_default_rulesets: false
+kantra_run_local: true
+kantra_overwrite: true
+kantra_extra_args: ""
+
+# frontend-analyzer-provider fix options
+fix_llm_provider: "goose"
+rules_strategies_path: "{{ frontend_provider_path }}/rules/patternfly-v5-to-v6/fix-strategies.json"
 
 # Application
 app_repo_branch: "main"

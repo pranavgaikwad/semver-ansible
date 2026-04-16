@@ -45,16 +45,17 @@
   ansible.builtin.shell:
     cmd: >-
       export PATH="{{ ansible_env.HOME }}/.kantra:{{ ansible_env.HOME }}/.local/bin:$PATH" &&
-      export JAVA_HOME=$(readlink -f /usr/lib/jvm/java) &&
+      {% if ansible_os_family | default('') == 'RedHat' %}export JAVA_HOME=$(readlink -f /usr/lib/jvm/java) &&{% endif %}
       kantra analyze
-      --provider java
+      --provider {{ kantra_provider }}
       --input {{ app_path }}
       --output {{ outputs_dir }}/{{ app_name }}/kantra
       --rules {{ outputs_dir }}/semver_rules
       --override-provider-settings {{ workspace_dir }}/provider_settings.json
-      --enable-default-rulesets=false
-      --run-local
-      --overwrite
+      {% if not (kantra_enable_default_rulesets | bool) %}--enable-default-rulesets=false{% endif %}
+      {% if kantra_run_local | bool %}--run-local{% endif %}
+      {% if kantra_overwrite | bool %}--overwrite{% endif %}
+      {{ kantra_extra_args }}
     chdir: "{{ workspace_dir }}"
   args:
     executable: /bin/bash
