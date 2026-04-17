@@ -31,15 +31,22 @@ platform_lookup() {
     esac
 }
 
-# ── Repo URLs ────────────────────────────────────────────────────────────
+# ── Repo defaults ────────────────────────────────────────────────────────
 KANTRA_REPO_URL="https://github.com/konveyor/kantra.git"
-SEMVER_REPO_URL="https://github.com/shawn-hurley/semver-analyzer.git"
+KANTRA_REPO_BRANCH=""
+SEMVER_REPO_URL="https://github.com/pranavgaikwad/semver-analyzer.git"
+SEMVER_REPO_BRANCH="feature/java-feature-flag"
 KONVEYOR_CORE_REPO_URL="https://github.com/shawn-hurley/konveyor-core.git"
+KONVEYOR_CORE_REPO_BRANCH=""
 FAP_REPO_URL="https://github.com/shawn-hurley/frontend-analyzer-provider.git"
+FAP_REPO_BRANCH=""
 FIX_ENGINE_REPO_URL="https://github.com/shawn-hurley/fix-engine.git"
+FIX_ENGINE_REPO_BRANCH=""
+ANALYZER_LSP_REPO_URL="https://github.com/konveyor/analyzer-lsp.git"
+ANALYZER_LSP_REPO_BRANCH=""
 PF_REACT_REPO_URL="https://github.com/patternfly/patternfly-react.git"
 PF_REPO_URL="https://github.com/patternfly/patternfly.git"
-TOKEN_MAPPINGS_URL="https://raw.githubusercontent.com/shawn-hurley/semver-analyzer/refs/heads/main/hack/integration/patternfly-token-mappings.yaml"
+TOKEN_MAPPINGS_URL="https://raw.githubusercontent.com/pranavgaikwad/semver-analyzer/refs/heads/feature/java-feature-flag/hack/integration/patternfly-token-mappings.yaml"
 
 # ── State ────────────────────────────────────────────────────────────────
 HOST_PLATFORM=""
@@ -60,6 +67,15 @@ die()   { error "$@"; exit 1; }
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+git_clone() {
+    local url="$1" dest="$2" branch="${3:-}" logfile="${4:-/dev/null}" depth="${5:-}"
+    local args=""
+    [[ -n "$depth" ]] && args="--depth $depth"
+    [[ -n "$branch" ]] && args="$args --branch $branch"
+    # shellcheck disable=SC2086
+    git clone $args "$url" "$dest" >> "$logfile" 2>&1
 }
 
 prompt_select() {
@@ -244,7 +260,7 @@ build_kantra_from_source() {
     info "Follow logs: tail -f $log"
 
     info "Cloning konveyor/kantra..."
-    git clone --depth 1 "$KANTRA_REPO_URL" "$kantra_src" >> "$log" 2>&1 \
+    git_clone "$KANTRA_REPO_URL" "$kantra_src" "$KANTRA_REPO_BRANCH" "$log" 1 \
         || die "Failed to clone kantra. Check $log"
 
     local goos goarch
@@ -271,7 +287,7 @@ build_java_external_provider() {
     info "Follow logs: tail -f $log"
 
     info "Cloning konveyor/analyzer-lsp..."
-    git clone --depth 1 https://github.com/konveyor/analyzer-lsp.git "$analyzer_src" >> "$log" 2>&1 \
+    git_clone "$ANALYZER_LSP_REPO_URL" "$analyzer_src" "$ANALYZER_LSP_REPO_BRANCH" "$log" 1 \
         || die "Failed to clone analyzer-lsp. Check $log"
 
     local goos goarch
@@ -332,11 +348,11 @@ build_semver_analyzer() {
     info "Follow logs: tail -f $log"
 
     info "Cloning konveyor-core (path dependency)..."
-    git clone "$KONVEYOR_CORE_REPO_URL" "$konveyor_core_src" >> "$log" 2>&1 \
+    git_clone "$KONVEYOR_CORE_REPO_URL" "$konveyor_core_src" "$KONVEYOR_CORE_REPO_BRANCH" "$log" \
         || die "Failed to clone konveyor-core. Check $log"
 
     info "Cloning semver-analyzer..."
-    git clone "$SEMVER_REPO_URL" "$semver_src" >> "$log" 2>&1 \
+    git_clone "$SEMVER_REPO_URL" "$semver_src" "$SEMVER_REPO_BRANCH" "$log" \
         || die "Failed to clone semver-analyzer. Check $log"
 
     local target
@@ -372,11 +388,11 @@ build_frontend_analyzer_provider() {
     info "Follow logs: tail -f $log"
 
     info "Cloning fix-engine (path dependency)..."
-    git clone "$FIX_ENGINE_REPO_URL" "$BUILD_TMP/fix-engine" >> "$log" 2>&1 \
+    git_clone "$FIX_ENGINE_REPO_URL" "$BUILD_TMP/fix-engine" "$FIX_ENGINE_REPO_BRANCH" "$log" \
         || die "Failed to clone fix-engine. Check $log"
 
     info "Cloning frontend-analyzer-provider..."
-    git clone "$FAP_REPO_URL" "$fap_src" >> "$log" 2>&1 \
+    git_clone "$FAP_REPO_URL" "$fap_src" "$FAP_REPO_BRANCH" "$log" \
         || die "Failed to clone frontend-analyzer-provider. Check $log"
 
     local target
@@ -406,13 +422,13 @@ generate_prepackaged_rules() {
 
     if [[ ! -d "$pf_react_src/.git" ]]; then
         info "Cloning patternfly-react..."
-        git clone "$PF_REACT_REPO_URL" "$pf_react_src" >> "$clone_log" 2>&1 \
+        git_clone "$PF_REACT_REPO_URL" "$pf_react_src" "" "$clone_log" \
             || die "Failed to clone patternfly-react. Check $clone_log"
     fi
 
     if [[ ! -d "$pf_src/.git" ]]; then
         info "Cloning patternfly..."
-        git clone "$PF_REPO_URL" "$pf_src" >> "$clone_log" 2>&1 \
+        git_clone "$PF_REPO_URL" "$pf_src" "" "$clone_log" \
             || die "Failed to clone patternfly. Check $clone_log"
     fi
 

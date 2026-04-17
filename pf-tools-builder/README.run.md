@@ -46,7 +46,9 @@ Options:
 
 ## Migration Pipeline
 
-The migration runs in 8 steps:
+The migration runs in two phases, each prompted for confirmation:
+
+### Phase 1: Automated analysis and fixes (steps 1-7)
 
 | Step | Description |
 |------|-------------|
@@ -57,11 +59,16 @@ The migration runs in 8 steps:
 | 5 | Convert analysis output (YAML to JSON) |
 | 6 | Apply pattern-based fixes |
 | 7 | Apply LLM-based fixes (via goose) |
-| 8 | Run AI agent for remaining fixes (optional, prompted) |
 
-Steps 1-7 run automatically. Step 8 prompts for confirmation.
+After step 7, all automated changes are committed with the message "Apply automated migration fixes (pattern-based + LLM)".
 
-After step 7, all automated changes are committed with the message "Apply automated migration fixes (pattern-based + LLM)" so you can distinguish them from AI agent changes.
+### Phase 2: AI agent (step 8)
+
+| Step | Description |
+|------|-------------|
+| 8 | Run AI agent for remaining fixes (build errors, test failures) |
+
+The AI agent focuses on getting the app to build and pass tests — it collects all errors, groups them by root cause, and fixes them in batches.
 
 ## Rule Generation
 
@@ -94,10 +101,12 @@ logs/20260416T140000/
 ├── kantra.log
 ├── fix-pattern.log
 ├── fix-llm.log
-├── agent-goose.log    # or agent-claude.log / agent-opencode.log
-├── semver_analyze.log # only for --generate-rules
+├── agent-goose.log      # or agent-claude.log / agent-opencode.log
+├── semver_analyze.log   # only for --generate-rules
 └── semver_konveyor.log
 ```
+
+Long-running steps show a live timer and the `tail -f` command for following logs in another terminal.
 
 ## Archive Contents
 

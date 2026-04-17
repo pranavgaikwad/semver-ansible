@@ -7,8 +7,7 @@ Builds a self-contained distributable archive containing all binaries, pre-gener
 | Tool | Purpose | Install |
 |------|---------|---------|
 | go | Build kantra and java-external-provider | https://go.dev/dl/ |
-| cargo | Build Rust binaries | https://rustup.rs/ |
-| rustup | Cross-compile targets | https://rustup.rs/ |
+| cargo + rustup | Build Rust binaries | https://rustup.rs/ |
 | git | Clone source repos | System package manager |
 | curl | Download releases | System package manager |
 | unzip | Extract kantra release | System package manager |
@@ -16,7 +15,8 @@ Builds a self-contained distributable archive containing all binaries, pre-gener
 | nvm | Node.js for rule generation | https://github.com/nvm-sh/nvm |
 
 For cross-compilation (building for a different platform):
-- [cross](https://github.com/cross-rs/cross) or [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild)
+- [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild): `cargo install cargo-zigbuild`
+- [llvm](https://llvm.org/) (provides `llvm-ar` for cross-compile of C dependencies): `brew install llvm`
 
 ## Usage
 
@@ -29,6 +29,28 @@ The script prompts for:
 1. **Target platform**: Linux_x86, Linux_arm64, Mac_x86, Mac_arm64
 2. **Kantra release**: Selects from available GitHub releases
 
+## Overriding Repo URLs and Branches
+
+All source repo URLs and branches can be overridden via environment variables:
+
+```bash
+SEMVER_REPO_URL=https://github.com/my-fork/semver-analyzer.git \
+SEMVER_REPO_BRANCH=my-branch \
+./build.sh
+```
+
+| Variable | Default |
+|----------|---------|
+| `KANTRA_REPO_URL` / `KANTRA_REPO_BRANCH` | konveyor/kantra |
+| `SEMVER_REPO_URL` / `SEMVER_REPO_BRANCH` | pranavgaikwad/semver-analyzer, feature/java-feature-flag |
+| `KONVEYOR_CORE_REPO_URL` / `KONVEYOR_CORE_REPO_BRANCH` | shawn-hurley/konveyor-core |
+| `FAP_REPO_URL` / `FAP_REPO_BRANCH` | shawn-hurley/frontend-analyzer-provider |
+| `FIX_ENGINE_REPO_URL` / `FIX_ENGINE_REPO_BRANCH` | shawn-hurley/fix-engine |
+| `ANALYZER_LSP_REPO_URL` / `ANALYZER_LSP_REPO_BRANCH` | konveyor/analyzer-lsp |
+| `PF_REACT_REPO_URL` | patternfly/patternfly-react |
+| `PF_REPO_URL` | patternfly/patternfly |
+| `TOKEN_MAPPINGS_URL` | Raw from semver-analyzer repo |
+
 ## Build Steps (13 total)
 
 | Step | Description |
@@ -37,12 +59,12 @@ The script prompts for:
 | 2 | Download kantra release assets (JDT, rulesets, etc.) |
 | 3 | Build kantra from source (Go) |
 | 4 | Build java-external-provider from analyzer-lsp (Go) |
-| 5 | Build semver-analyzer (Rust) |
+| 5 | Build semver-analyzer (Rust, without Java feature) |
 | 6 | Build semver-analyzer for host (if cross-compiling) |
 | 7 | Build frontend-analyzer-provider + fix-engine-cli (Rust) |
 | 8 | Download token mappings |
 | 9 | Generate pre-packaged rules (runs semver analysis) |
-| 10 | Create prompt.md |
+| 10 | Copy prompt.md |
 | 11 | Generate MANIFEST |
 | 12 | Copy run.sh and README.md |
 | 13 | Package zip archive |
@@ -84,9 +106,9 @@ The archive includes a `MANIFEST` file with build metadata:
 ## Cross-Compilation
 
 When the target platform differs from the host, the script:
-- Uses `cross` or `cargo-zigbuild` for Rust binaries
+- Uses `cargo-zigbuild` for Rust binaries (falls back to plain `cargo`)
 - Uses `GOOS`/`GOARCH` for Go binaries
-- Builds a separate host semver-analyzer binary for rule generation (rules must be generated on the host)
+- Builds a separate host semver-analyzer binary for rule generation
 
 ## Source Repositories
 
