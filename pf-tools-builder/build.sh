@@ -34,8 +34,8 @@ platform_lookup() {
 # ── Repo defaults ────────────────────────────────────────────────────────
 KANTRA_REPO_URL="https://github.com/konveyor/kantra.git"
 KANTRA_REPO_BRANCH=""
-SEMVER_REPO_URL="https://github.com/pranavgaikwad/semver-analyzer.git"
-SEMVER_REPO_BRANCH="feature/java-feature-flag"
+SEMVER_REPO_URL="https://github.com/shawn-hurley/semver-analyzer.git"
+SEMVER_REPO_BRANCH=""
 KONVEYOR_CORE_REPO_URL="https://github.com/shawn-hurley/konveyor-core.git"
 KONVEYOR_CORE_REPO_BRANCH=""
 FAP_REPO_URL="https://github.com/shawn-hurley/frontend-analyzer-provider.git"
@@ -50,7 +50,7 @@ PF_REACT_TO="${PF_REACT_TO:-v6.4.1}"
 PF_REPO_URL="https://github.com/patternfly/patternfly.git"
 PF_DEP_FROM="${PF_DEP_FROM:-v5.4.0}"
 PF_DEP_TO="${PF_DEP_TO:-v6.4.0}"
-TOKEN_MAPPINGS_URL="https://raw.githubusercontent.com/pranavgaikwad/semver-analyzer/refs/heads/feature/java-feature-flag/hack/integration/patternfly-token-mappings.yaml"
+TOKEN_MAPPINGS_URL="https://raw.githubusercontent.com/shawn-hurley/semver-analyzer/refs/heads/main/hack/integration/patternfly-token-mappings.yaml"
 
 # ── State ────────────────────────────────────────────────────────────────
 HOST_PLATFORM=""
@@ -332,6 +332,18 @@ rust_build() {
         build_cmd="cargo build --release --target $target"
     fi
 
+    # Override zig-bundled ar with llvm-ar for cross-compilation (zig ar is buggy with C deps)
+    local ar_env=""
+    if [[ "$CROSS_COMPILE" == true ]] && command -v cargo-zigbuild >/dev/null 2>&1; then
+        local llvm_ar=""
+        command -v llvm-ar >/dev/null 2>&1 && llvm_ar="$(command -v llvm-ar)"
+        [[ -z "$llvm_ar" ]] && llvm_ar="$({ find /opt/homebrew/opt /usr/local/opt -maxdepth 3 -name llvm-ar 2>/dev/null || true; } | head -1)"
+        if [[ -n "$llvm_ar" ]]; then
+            local ar_var="AR_$(echo "$target" | tr '-' '_')"
+            export AR="$llvm_ar"
+            export "$ar_var=$llvm_ar"
+        fi
+    fi
     (cd "$src_dir" && $build_cmd) >> "$log" 2>&1 || die "Failed to build $name. Check $log"
 
     local binary_path="$src_dir/target/$target/release/$name"
@@ -543,32 +555,46 @@ platform = ${TARGET_PLATFORM}
 build_date = ${build_date}
 
 [kantra]
+repo = ${KANTRA_REPO_URL}
+branch = ${KANTRA_REPO_BRANCH:-default}
 release_version = ${KANTRA_VERSION}
 source_sha = $(git_sha "$BUILD_TMP/kantra-src")
 
 [analyzer-lsp]
+repo = ${ANALYZER_LSP_REPO_URL}
+branch = ${ANALYZER_LSP_REPO_BRANCH:-default}
 source_sha = $(git_sha "$BUILD_TMP/analyzer-lsp")
 
 [semver-analyzer]
+repo = ${SEMVER_REPO_URL}
+branch = ${SEMVER_REPO_BRANCH:-default}
 source_sha = $(git_sha "$BUILD_TMP/semver-analyzer")
 
 [frontend-analyzer-provider]
+repo = ${FAP_REPO_URL}
+branch = ${FAP_REPO_BRANCH:-default}
 source_sha = $(git_sha "$BUILD_TMP/frontend-analyzer-provider")
 
 [fix-engine]
+repo = ${FIX_ENGINE_REPO_URL}
+branch = ${FIX_ENGINE_REPO_BRANCH:-default}
 source_sha = $(git_sha "$BUILD_TMP/fix-engine")
 
 [konveyor-core]
+repo = ${KONVEYOR_CORE_REPO_URL}
+branch = ${KONVEYOR_CORE_REPO_BRANCH:-default}
 source_sha = $(git_sha "$BUILD_TMP/konveyor-core")
 
 [rules]
+patternfly_react_repo = ${PF_REACT_REPO_URL}
 patternfly_react_from = ${MANIFEST_PF_REACT_FROM:-}
 patternfly_react_to = ${MANIFEST_PF_REACT_TO:-}
+patternfly_react_sha = $(git_sha "$BUILD_TMP/patternfly-react")
+patternfly_repo = ${PF_REPO_URL}
 patternfly_dep_from = ${MANIFEST_PF_DEP_FROM:-}
 patternfly_dep_to = ${MANIFEST_PF_DEP_TO:-}
-rule_count = ${MANIFEST_RULE_COUNT:-0}
-patternfly_react_sha = $(git_sha "$BUILD_TMP/patternfly-react")
 patternfly_sha = $(git_sha "$BUILD_TMP/patternfly")
+rule_count = ${MANIFEST_RULE_COUNT:-0}
 MANIFEST
 
     info "MANIFEST written"
