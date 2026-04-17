@@ -177,8 +177,14 @@ detect_host_platform() {
 }
 
 select_platform() {
+    local platforms="Linux_x86 Linux_arm64 Mac_x86 Mac_arm64"
+    local ordered="$HOST_PLATFORM"
+    for p in $platforms; do
+        [[ "$p" != "$HOST_PLATFORM" ]] && ordered="$ordered $p"
+    done
     printf "\n${BOLD}Select target platform:${NC}\n" >&2
-    TARGET_PLATFORM=$(prompt_select "Choose platform" "Linux_x86" "Linux_arm64" "Mac_x86" "Mac_arm64")
+    # shellcheck disable=SC2086
+    TARGET_PLATFORM=$(prompt_select "Choose platform" $ordered)
     info "Target platform: $TARGET_PLATFORM"
 
     if [[ "$TARGET_PLATFORM" == "$HOST_PLATFORM" ]]; then
