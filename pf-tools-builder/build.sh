@@ -45,7 +45,11 @@ FIX_ENGINE_REPO_BRANCH=""
 ANALYZER_LSP_REPO_URL="https://github.com/konveyor/analyzer-lsp.git"
 ANALYZER_LSP_REPO_BRANCH=""
 PF_REACT_REPO_URL="https://github.com/patternfly/patternfly-react.git"
+PF_REACT_FROM="${PF_REACT_FROM:-v5.4.0}"
+PF_REACT_TO="${PF_REACT_TO:-v6.4.1}"
 PF_REPO_URL="https://github.com/patternfly/patternfly.git"
+PF_DEP_FROM="${PF_DEP_FROM:-v5.4.0}"
+PF_DEP_TO="${PF_DEP_TO:-v6.4.0}"
 TOKEN_MAPPINGS_URL="https://raw.githubusercontent.com/pranavgaikwad/semver-analyzer/refs/heads/feature/java-feature-flag/hack/integration/patternfly-token-mappings.yaml"
 
 # ── State ────────────────────────────────────────────────────────────────
@@ -139,11 +143,9 @@ check_build_prerequisites() {
         exit 1
     fi
 
-    if ! command -v cross >/dev/null 2>&1; then
-        if ! command -v cargo-zigbuild >/dev/null 2>&1; then
-            warn "Neither cross nor cargo-zigbuild found. Cross-compilation will use plain cargo (may fail without a C linker for the target)."
-            warn "  Install: cargo install cargo-zigbuild"
-        fi
+    if ! command -v cargo-zigbuild >/dev/null 2>&1; then
+        warn "cargo-zigbuild not found. Cross-compilation will use plain cargo (may fail without a C linker for the target)."
+        warn "  Install: cargo install cargo-zigbuild"
     fi
 
     info "All build prerequisites satisfied"
@@ -313,15 +315,13 @@ rust_build() {
     info "Building $name for $target..."
     info "Follow logs: tail -f $log"
 
+    # Use rustup-managed toolchain for cross-compile targets
+    export PATH="$HOME/.cargo/bin:$PATH"
+    rustup target add "$target" >> "$log" 2>&1 || true
+
     local build_cmd
-    if [[ "$CROSS_COMPILE" == true ]]; then
-        if command -v cross >/dev/null 2>&1; then
-            build_cmd="cross build --release --target $target"
-        elif command -v cargo-zigbuild >/dev/null 2>&1; then
-            build_cmd="cargo zigbuild --release --target $target"
-        else
-            build_cmd="cargo build --release --target $target"
-        fi
+    if [[ "$CROSS_COMPILE" == true ]] && command -v cargo-zigbuild >/dev/null 2>&1; then
+        build_cmd="cargo zigbuild --release --target $target"
     else
         build_cmd="cargo build --release --target $target"
     fi
@@ -432,14 +432,8 @@ generate_prepackaged_rules() {
             || die "Failed to clone patternfly. Check $clone_log"
     fi
 
-    local pf_from pf_to dep_from dep_to
-    pf_from=$(cd "$pf_react_src" && git tag -l 'v5.*' --sort=-v:refname | head -1)
-    pf_to=$(cd "$pf_react_src" && git tag -l 'v6.*' --sort=-v:refname | head -1)
-    dep_from=$(cd "$pf_src" && git tag -l 'v5.*' --sort=-v:refname | head -1)
-    dep_to=$(cd "$pf_src" && git tag -l 'v6.*' --sort=-v:refname | head -1)
-
-    info "patternfly-react: $pf_from -> $pf_to"
-    info "patternfly:       $dep_from -> $dep_to"
+    info "patternfly-react: $PF_REACT_FROM -> $PF_REACT_TO"
+    info "patternfly:       $PF_DEP_FROM -> $PF_DEP_TO"
 
     local dep_build_cmd="source ~/.nvm/nvm.sh && nvm exec 20.11.0 bash -c 'export NODE_ENV=development && yarn install && npx gulp buildPatternfly'"
 
@@ -448,14 +442,14 @@ generate_prepackaged_rules() {
 
     info "Running semver-analyzer analyze..."
     info "Log: $analyze_log"
-    info "Running '$HOST_SEMVER_BIN analyze typescript --repo $pf_react_src --from $pf_from --to $pf_to --no-llm'"
+    info "Running '$HOST_SEMVER_BIN analyze typescript --repo $pf_react_src --from $PF_REACT_FROM --to $PF_REACT_TO --no-llm'"
     "$HOST_SEMVER_BIN" analyze typescript \
         --repo "$pf_react_src" \
-        --from "$pf_from" \
-        --to "$pf_to" \
+        --from "$PF_REACT_FROM" \
+        --to "$PF_REACT_TO" \
         --dep-repo "$pf_src" \
-        --dep-from "$dep_from" \
-        --dep-to "$dep_to" \
+        --dep-from "$PF_DEP_FROM" \
+        --dep-to "$PF_DEP_TO" \
         --dep-build-command "$dep_build_cmd" \
         --build-command 'corepack yarn build' \
         --no-llm \
@@ -494,10 +488,10 @@ generate_prepackaged_rules() {
     info "Rules generated: $rule_count"
 
     # Store metadata for MANIFEST
-    MANIFEST_PF_REACT_FROM="$pf_from"
-    MANIFEST_PF_REACT_TO="$pf_to"
-    MANIFEST_PF_DEP_FROM="$dep_from"
-    MANIFEST_PF_DEP_TO="$dep_to"
+    MANIFEST_PF_REACT_FROM="$PF_REACT_FROM"
+    MANIFEST_PF_REACT_TO="$PF_REACT_TO"
+    MANIFEST_PF_DEP_FROM="$PF_DEP_FROM"
+    MANIFEST_PF_DEP_TO="$PF_DEP_TO"
     MANIFEST_RULE_COUNT="$rule_count"
 }
 
