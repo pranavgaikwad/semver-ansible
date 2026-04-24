@@ -456,10 +456,9 @@ run_migration() {
         require_file "$strategies_file"
 
         run_timed "Pattern-based fixes" "$LOGS_DIR/fix-pattern.log" \
-            "$FIX_BIN" fix "$MIGRATE_PATH" \
-            --rules-strategies "$strategies_file" \
-            --input "$kantra_json" \
-            --apply || {
+            unbuffer "$FIX_BIN" fix "$MIGRATE_PATH" \
+            --strategies "$strategies_file" \
+            --input "$kantra_json"  || {
                 die "Pattern-based fix failed. Check $LOGS_DIR/fix-pattern.log"
             }
 
@@ -467,11 +466,10 @@ run_migration() {
         # TODO: add --llm-timeout "$LLM_TIMEOUT" when supported (PR pending)
         step "7/$total" "Applying LLM-based fixes"
         run_timed "LLM-based fixes" "$LOGS_DIR/fix-llm.log" \
-            "$FIX_BIN" fix "$MIGRATE_PATH" \
+            unbuffer "$FIX_BIN" fix "$MIGRATE_PATH" \
             --input "$kantra_json" \
-            --apply \
             --llm-provider goose \
-            --rules-strategies "$strategies_file" || {
+            --strategies "$strategies_file" || {
                 warn "LLM-based fix returned non-zero (some fixes may have failed). Check $LOGS_DIR/fix-llm.log"
             }
 
