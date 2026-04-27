@@ -15,7 +15,7 @@ error() { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; }
 die()   { error "$@"; exit 1; }
 
 # ── Defaults ─────────────────────────────────────────────────────────────
-DEFAULT_IMAGE="localhost/semver-runner:latest"
+DEFAULT_IMAGE="quay.io/pranavgaikwad/patternfly-tools:latest"
 CONTAINER_WORKSPACE="/workspace"
 
 MODE="mount"

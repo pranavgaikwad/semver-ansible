@@ -532,22 +532,26 @@ run_migration() {
         pushd "$MIGRATE_PATH" > /dev/null || die "Failed to cd into $MIGRATE_PATH"
 
         info "Running evaluation with: $BASE_BRANCH → $migration_branch"
+        info "Follow logs: tail -f $LOGS_DIR/eval-agent.log"
         case "$AGENT" in
             goose)
-                GOOSE_MODE=auto goose run -i "$eval_prompt_tmp" \
+                info "Running 'GOOSE_MODE=auto goose run -i $eval_prompt_tmp'"
+                unbuffer env GOOSE_MODE=auto goose run -i "$eval_prompt_tmp" \
                     > "$LOGS_DIR/eval-agent.log" 2>&1 || {
                     warn "Evaluation agent exited with non-zero status. Check $LOGS_DIR/eval-agent.log"
                 }
                 ;;
             claude)
-                claude --allowedTools "Bash" "Edit" "Write" "Read" "WebSearch" "WebFetch" \
+                info "Running 'claude --allowedTools ... -p $eval_prompt_tmp'"
+                unbuffer claude --allowedTools "Bash" "Edit" "Write" "Read" "WebSearch" "WebFetch" \
                     -p "$(cat "$eval_prompt_tmp")" \
                     > "$LOGS_DIR/eval-agent.log" 2>&1 || {
                     warn "Evaluation agent exited with non-zero status. Check $LOGS_DIR/eval-agent.log"
                 }
                 ;;
             opencode)
-                opencode run "$(cat "$eval_prompt_tmp")" \
+                info "Running 'opencode run $eval_prompt_tmp'"
+                unbuffer opencode run "$(cat "$eval_prompt_tmp")" \
                     > "$LOGS_DIR/eval-agent.log" 2>&1 || {
                     warn "Evaluation agent exited with non-zero status. Check $LOGS_DIR/eval-agent.log"
                 }
