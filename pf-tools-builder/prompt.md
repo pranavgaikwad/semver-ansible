@@ -25,6 +25,10 @@ After the build succeeds, run the test suite. Apply the same batch approach: col
 
 Update snapshots if the new output is correct.
 
+## Critical: Do NOT revert to PatternFly 5
+
+Automated tools have already migrated imports, components, props, and CSS tokens to PatternFly 6. When build errors arise from these migrations, fix them using the correct PatternFly 6 API. Never undo the migration by reverting code back to PatternFly 5 patterns, imports, or packages.
+
 ## Important
 
 - Do not refactor, improve, or add features. Only fix what is broken.

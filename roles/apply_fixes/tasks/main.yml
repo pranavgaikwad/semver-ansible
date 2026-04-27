@@ -32,9 +32,8 @@
   ansible.builtin.shell:
     cmd: >-
       ./frontend-analyzer-provider fix {{ app_path }}
-      --rules-strategies {{ rules_strategies_path }}
+      --strategies {{ rules_strategies_path }}
       --input {{ outputs_dir }}/{{ app_name }}/kantra/output.json
-      --apply
     chdir: "{{ workspace_dir }}"
   args:
     executable: /bin/bash
@@ -58,10 +57,9 @@
       export PATH="{{ ansible_env.HOME }}/.local/bin:$PATH" &&
       ./frontend-analyzer-provider fix {{ app_path }}
       --input {{ outputs_dir }}/{{ app_name }}/kantra/output.json
-      --apply
       --llm-provider {{ fix_llm_provider }}
       --llm-timeout={{ llm_timeout }}
-      --rules-strategies {{ rules_strategies_path }}
+      --strategies {{ rules_strategies_path }}
     chdir: "{{ workspace_dir }}"
   args:
     executable: /bin/bash
