@@ -130,6 +130,7 @@ RUN microdnf install -y --nodocs \
     bzip2 \
     tar \
     libgomp \
+    expect \
     && microdnf clean all
 
 # yq
