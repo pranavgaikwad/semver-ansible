@@ -75,6 +75,9 @@ done
 [[ -d "$APP_PATH" ]] || die "Not a directory: $APP_PATH"
 APP_PATH="$(cd "$APP_PATH" && pwd)"
 
+[[ -z "${GCP_PROJECT_ID:-}" ]] && die "GCP_PROJECT_ID is not set. Export it before running (e.g., export GCP_PROJECT_ID=my-project)"
+[[ -z "${GCP_LOCATION:-}" ]] && die "GCP_LOCATION is not set. Export it before running (e.g., export GCP_LOCATION=us-east5)"
+
 RUNTIME=$(detect_runtime)
 info "Container runtime: $RUNTIME"
 info "Mode: $MODE"
