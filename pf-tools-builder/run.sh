@@ -621,7 +621,7 @@ check_generate_prerequisites() {
 }
 
 prompt_tag_selection() {
-    local repo_path="$1" prefix="$2" label="$3" count="${4:-10}"
+    local repo_path="$1" prefix="$2" label="$3" count="${4:-3}"
     local tag_list
     tag_list=$(cd "$repo_path" && git tag -l "${prefix}*" --sort=-v:refname | head -n "$count")
 
