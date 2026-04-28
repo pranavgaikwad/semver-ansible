@@ -71,17 +71,28 @@ RUN strip \
 
 
 # Stage 3: Rule generation
-FROM registry.access.redhat.com/ubi9/nodejs-20 AS rule-generator
+FROM registry.access.redhat.com/ubi9/ubi AS rule-generator
 
 ARG PF_REACT_FROM=v5.4.0
 ARG PF_REACT_TO=v6.4.1
 ARG PF_DEP_FROM=v5.4.0
 ARG PF_DEP_TO=v6.4.0
+ARG FROM_NODE_VERSION=20
+ARG TO_NODE_VERSION=20
+ARG FROM_INSTALL_CMD=""
 ARG TOKEN_MAPPINGS_URL=https://raw.githubusercontent.com/shawn-hurley/semver-analyzer/refs/heads/main/hack/integration/patternfly-token-mappings.yaml
 
-USER root
-RUN dnf install -y git && dnf clean all
-RUN npm install -g corepack && corepack enable
+RUN dnf install -y git make gcc gcc-c++ && dnf clean all
+
+SHELL ["/bin/bash", "-c"]
+
+ENV NVM_DIR=/root/.nvm
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash \
+    && source "$NVM_DIR/nvm.sh" \
+    && nvm install "$FROM_NODE_VERSION" \
+    && nvm install "$TO_NODE_VERSION" \
+    && nvm alias default "$TO_NODE_VERSION" \
+    && npm install -g corepack && corepack enable
 
 COPY --from=rust-builder /src/semver-analyzer/target/release/semver-analyzer /usr/local/bin/
 
@@ -95,13 +106,17 @@ RUN curl -fSL -o /src/patternfly-token-mappings.yaml "$TOKEN_MAPPINGS_URL"
 
 # Generate semver report (YARN_ENABLE_SCRIPTS=false skips native module builds that fail in containers)
 ENV YARN_ENABLE_SCRIPTS=false
-RUN semver-analyzer analyze typescript \
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+RUN source "$NVM_DIR/nvm.sh" && semver-analyzer analyze typescript \
     --repo /src/patternfly-react \
     --from "$PF_REACT_FROM" --to "$PF_REACT_TO" \
     --dep-repo /src/patternfly \
     --dep-from "$PF_DEP_FROM" --dep-to "$PF_DEP_TO" \
     --dep-build-command "yarn install && npx gulp buildPatternfly" \
     --build-command "corepack yarn build" \
+    --from-node-version "$FROM_NODE_VERSION" \
+    --to-node-version "$TO_NODE_VERSION" \
+    ${FROM_INSTALL_CMD:+--from-install-command "$FROM_INSTALL_CMD"} \
     --no-llm \
     -o /src/semver_report.json
 
@@ -111,6 +126,8 @@ RUN mkdir -p /rules/semver_rules \
     --from-report /src/semver_report.json \
     --output-dir /rules/semver_rules \
     --rename-patterns /src/patternfly-token-mappings.yaml
+
+SHELL ["/bin/sh", "-c"]
 
 
 # Stage 4: Runtime image
