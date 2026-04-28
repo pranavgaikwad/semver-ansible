@@ -7,6 +7,7 @@ Automated migration toolkit for upgrading applications from PatternFly 5 to Patt
 - **Java JDK** with `JAVA_HOME` set
 - **AI agent** (one of): [Goose](https://github.com/block/goose), [Claude Code](https://docs.anthropic.com/en/docs/claude-code), or [OpenCode](https://github.com/opencode-ai/opencode)
 - **yq** or **python3** (for YAML-to-JSON conversion)
+- **unbuffer** (for MacOS 'brew install expect')
 
 For rule generation only:
 - **git**
@@ -85,6 +86,32 @@ Non-interactive:
 ```bash
 ./run.sh --generate-rules --from v5.4.0 --to v6.4.1 --dep-from v5.4.0 --dep-to v6.4.0 --non-interactive
 ```
+
+### Per-ref build configuration
+
+When the `--from` and `--to` refs require different Node.js versions or build commands, use the per-ref flags. For example, migrating **quipucords-ui** from PatternFly 5.3.3 (Node 18) to PatternFly 6.4.1 (Node 20):
+
+```bash
+./run.sh --generate-rules \
+  --from v5.3.3 --to v6.4.1 \
+  --dep-from v5.3.0 --dep-to v6.4.0 \
+  --from-node-version 18 --to-node-version 20 \
+  --from-install-command "corepack yarn install" \
+  --non-interactive
+```
+
+Available per-ref flags:
+
+| Flag | Description |
+|------|-------------|
+| `--from-node-version <V>` | Node version for the `--from` ref |
+| `--to-node-version <V>` | Node version for the `--to` ref |
+| `--from-install-command <C>` | Install command for the `--from` ref |
+| `--to-install-command <C>` | Install command for the `--to` ref |
+| `--from-build-command <C>` | Build command for the `--from` ref |
+| `--to-build-command <C>` | Build command for the `--to` ref |
+
+All are optional — when omitted, semver-analyzer uses its defaults.
 
 ## Using Custom Rules
 

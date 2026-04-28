@@ -38,6 +38,9 @@ NON_INTERACTIVE=false
 BASE_BRANCH="main"
 ENABLE_EVAL=false
 GEN_FROM="" GEN_TO="" GEN_DEP_FROM="" GEN_DEP_TO=""
+GEN_FROM_NODE_VERSION="" GEN_TO_NODE_VERSION=""
+GEN_FROM_INSTALL_CMD="" GEN_TO_INSTALL_CMD=""
+GEN_FROM_BUILD_CMD="" GEN_TO_BUILD_CMD=""
 PROVIDER_PID=""
 TEMP_DIR=""
 
@@ -155,6 +158,15 @@ Options:
   --dep-to <REF>             --dep-to for rule generation
   --base-branch <NAME>       Base branch to create migration branch from (default: main)
   --enable-eval              Run evaluation agent after migration to assess quality
+
+  Per-Ref Build (rule generation):
+  --from-node-version <V>    Node version for --from ref
+  --to-node-version <V>      Node version for --to ref
+  --from-install-command <C>  Install command for --from ref
+  --to-install-command <C>    Install command for --to ref
+  --from-build-command <C>    Build command for --from ref
+  --to-build-command <C>      Build command for --to ref
+
   --non-interactive          Skip all prompts
   -h, --help                 Show help
 EOF
@@ -174,6 +186,12 @@ while [[ $# -gt 0 ]]; do
         --dep-to)          GEN_DEP_TO="$2"; shift 2 ;;
         --base-branch)     BASE_BRANCH="$2"; shift 2 ;;
         --enable-eval)     ENABLE_EVAL=true; shift ;;
+        --from-node-version)    GEN_FROM_NODE_VERSION="$2"; shift 2 ;;
+        --to-node-version)      GEN_TO_NODE_VERSION="$2"; shift 2 ;;
+        --from-install-command) GEN_FROM_INSTALL_CMD="$2"; shift 2 ;;
+        --to-install-command)   GEN_TO_INSTALL_CMD="$2"; shift 2 ;;
+        --from-build-command)   GEN_FROM_BUILD_CMD="$2"; shift 2 ;;
+        --to-build-command)     GEN_TO_BUILD_CMD="$2"; shift 2 ;;
         --non-interactive) NON_INTERACTIVE=true; shift ;;
         -h|--help)         usage ;;
         *)                 die "Unknown option: $1" ;;
@@ -603,7 +621,7 @@ check_generate_prerequisites() {
 }
 
 prompt_tag_selection() {
-    local repo_path="$1" prefix="$2" label="$3" count="${4:-3}"
+    local repo_path="$1" prefix="$2" label="$3" count="${4:-10}"
     local tag_list
     tag_list=$(cd "$repo_path" && git tag -l "${prefix}*" --sort=-v:refname | head -n "$count")
 
@@ -666,6 +684,14 @@ run_generate_rules() {
     step "3/$total" "Running semver-analyzer analyze"
     local dep_build_cmd="source ~/.nvm/nvm.sh && nvm exec 20.11.0 bash -c 'export NODE_ENV=development && yarn install && npx gulp buildPatternfly'"
 
+    local per_ref_args=()
+    [[ -n "$GEN_FROM_NODE_VERSION" ]] && per_ref_args+=(--from-node-version "$GEN_FROM_NODE_VERSION")
+    [[ -n "$GEN_TO_NODE_VERSION" ]]   && per_ref_args+=(--to-node-version "$GEN_TO_NODE_VERSION")
+    [[ -n "$GEN_FROM_INSTALL_CMD" ]]  && per_ref_args+=(--from-install-command "$GEN_FROM_INSTALL_CMD")
+    [[ -n "$GEN_TO_INSTALL_CMD" ]]    && per_ref_args+=(--to-install-command "$GEN_TO_INSTALL_CMD")
+    [[ -n "$GEN_FROM_BUILD_CMD" ]]    && per_ref_args+=(--from-build-command "$GEN_FROM_BUILD_CMD")
+    [[ -n "$GEN_TO_BUILD_CMD" ]]      && per_ref_args+=(--to-build-command "$GEN_TO_BUILD_CMD")
+
     run_timed "Semver analysis" "$LOGS_DIR/semver_analyze.stdout" \
         "$SEMVER_BIN" analyze typescript \
         --repo "$TEMP_DIR/patternfly-react" \
@@ -676,6 +702,7 @@ run_generate_rules() {
         --dep-to "$dep_to" \
         --dep-build-command "$dep_build_cmd" \
         --build-command 'corepack yarn build' \
+        "${per_ref_args[@]}" \
         --no-llm \
         --log-file "$LOGS_DIR/semver_analyze.log" \
         --log-level info \
