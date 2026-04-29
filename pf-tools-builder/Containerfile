@@ -148,6 +148,8 @@ RUN microdnf install -y --nodocs \
     tar \
     libgomp \
     expect \
+    nodejs \
+    npm \
     && microdnf clean all
 
 # yq
@@ -193,9 +195,13 @@ COPY --from=rust-builder /src/frontend-analyzer-provider/rules/patternfly-v5-to-
 RUN mkdir -p /root/.config/goose
 COPY goose-config.yaml /root/.config/goose/config.yaml
 
+# Pre-initialize goose sessions DB to avoid SQLite race condition with concurrent fixes
+RUN mkdir -p /root/.local/share/goose/sessions && \
+    goose info > /dev/null 2>&1 || true
+
 # run.sh and prompt
-COPY run.sh prompt.md eval_prompt.md* ./
-RUN chmod +x run.sh bin/* .kantra/kantra .kantra/java-external-provider
+COPY run.sh eval.sh prompt.md eval_prompt.md* ./
+RUN chmod +x run.sh eval.sh bin/* .kantra/kantra .kantra/java-external-provider
 
 VOLUME ["/workspace"]
 

@@ -14,6 +14,51 @@ warn()  { printf "${YELLOW}[WARN]${NC}  %s\n" "$*"; }
 error() { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; }
 die()   { error "$@"; exit 1; }
 
+# ── Cleanup ──────────────────────────────────────────────────────────────
+CONTAINER_IDS=""
+BAKE_IMAGES=""
+TEMP_FILES=""
+
+cleanup() {
+    local exit_code=$?
+    if [[ "$exit_code" -ne 0 ]]; then
+        printf "\n" >&2
+        error "run_container.sh failed with exit code $exit_code"
+        if [[ -n "$CONTAINER_IDS" ]]; then
+            warn "Containers kept for debugging: $CONTAINER_IDS"
+            warn "Inspect: $RUNTIME logs <container_id>"
+            warn "Shell:   $RUNTIME exec -it <container_id> bash"
+            warn "Remove:  $RUNTIME rm -f <container_id>"
+        fi
+    else
+        # Only clean up containers on success
+        for cid in $CONTAINER_IDS; do
+            "$RUNTIME" stop "$cid" > /dev/null 2>&1 || true
+            "$RUNTIME" rm "$cid" > /dev/null 2>&1 || true
+        done
+        for img in $BAKE_IMAGES; do
+            "$RUNTIME" rmi "$img" > /dev/null 2>&1 || true
+        done
+    fi
+    # Always clean temp files
+    for f in $TEMP_FILES; do
+        rm -f "$f" 2>/dev/null || true
+    done
+}
+trap cleanup EXIT INT TERM
+
+track_container() {
+    CONTAINER_IDS="$CONTAINER_IDS $1"
+}
+
+track_bake_image() {
+    BAKE_IMAGES="$BAKE_IMAGES $1"
+}
+
+track_temp_file() {
+    TEMP_FILES="$TEMP_FILES $1"
+}
+
 # ── Defaults ─────────────────────────────────────────────────────────────
 DEFAULT_IMAGE="quay.io/pranavgaikwad/patternfly-tools:latest"
 CONTAINER_WORKSPACE="/workspace"
@@ -22,6 +67,10 @@ MODE="mount"
 IMAGE="$DEFAULT_IMAGE"
 GOOSE_CONFIG=""
 APP_PATH=""
+ENABLE_EVAL=false
+EVAL_ONLY_BRANCH=""
+BASE_BRANCH="main"
+AGENT="goose"
 PASSTHROUGH_ARGS=()
 
 # ── Usage ────────────────────────────────────────────────────────────────
@@ -29,18 +78,26 @@ usage() {
     cat <<'EOF'
 PatternFly Migration Tools — Container Runner
 
-Usage: ./run_container.sh --migrate <PATH> [OPTIONS] [-- RUN.SH OPTIONS]
+Usage: ./run_container.sh --migrate <PATH> [OPTIONS]
+
+Required:
+  --migrate <PATH>           Path to the application to migrate
 
 Container options:
-  --migrate <PATH>           Project to migrate (required)
   --bake                     Bake app into image instead of mounting (for slow mounts)
-  --goose-config <PATH>      Goose config directory (default: ~/.config/goose)
-  --image <NAME>             Container image (default: localhost/semver-runner:latest)
-  --enable-eval              Run evaluation agent after migration
-  -h, --help                 Show help
+  --goose-config <PATH>      Override goose config directory
+  --image <NAME>             Container image (default: quay.io/pranavgaikwad/patternfly-tools:latest)
 
-All other options are forwarded to run.sh inside the container.
-Examples: --agent claude, --rules-dir /path, --non-interactive
+Evaluation options:
+  --enable-eval              Run evaluation after migration
+  --eval-only <BRANCH>       Run evaluation only against an existing migrated branch (skips migration)
+
+Migration options (forwarded to run.sh):
+  --base-branch <NAME>       Branch of the application to migrate (default: main)
+  --llm-timeout <SECS>       LLM timeout (default: 300)
+  --non-interactive          Skip all prompts
+
+  -h, --help                 Show help
 EOF
     exit 0
 }
@@ -63,7 +120,10 @@ while [[ $# -gt 0 ]]; do
         --bake)           MODE="bake"; shift ;;
         --goose-config)   GOOSE_CONFIG="$2"; shift 2 ;;
         --image)          IMAGE="$2"; shift 2 ;;
-        --enable-eval)    PASSTHROUGH_ARGS+=("--enable-eval"); shift ;;
+        --enable-eval)    ENABLE_EVAL=true; shift ;;
+        --eval-only)      ENABLE_EVAL=true; EVAL_ONLY_BRANCH="$2"; shift 2 ;;
+        --base-branch)    BASE_BRANCH="$2"; PASSTHROUGH_ARGS+=("--base-branch" "$2"); shift 2 ;;
+        --agent)          AGENT="$2"; PASSTHROUGH_ARGS+=("--agent" "$2"); shift 2 ;;
         -h|--help)        usage ;;
         --)               shift; PASSTHROUGH_ARGS+=("$@"); break ;;
         *)                PASSTHROUGH_ARGS+=("$1"); shift ;;
@@ -110,7 +170,7 @@ for var in GOOSE_PROVIDER GOOSE_MODEL GOOSE_API_KEY \
            ANTHROPIC_API_KEY OPENAI_API_KEY \
            GCP_PROJECT_ID GCP_LOCATION; do
     if [[ -n "${!var:-}" ]]; then
-        ENV_ARGS+=(-e "$var")
+        ENV_ARGS+=(-e "$var=${!var}")
     fi
 done
 
@@ -120,7 +180,7 @@ if [[ -d "$GCP_CREDS_DIR" ]]; then
 fi
 
 # ── Paths inside container ────────────────────────────────────────────────
-CONTAINER_LOGS="/mnt/logs"
+CONTAINER_LOGS="/opt/patternfly-tools/logs"
 LOGS_DEST="$PWD/.pf-migration-logs"
 
 # ── Mode: Mount ──────────────────────────────────────────────────────────
@@ -133,19 +193,17 @@ run_mount_mode() {
     container_id=$("$RUNTIME" run -d \
         -v "$APP_PATH:$CONTAINER_WORKSPACE:z" \
         -v "$LOGS_DEST:$CONTAINER_LOGS:z" \
-        -e "LOGS_DIR=$CONTAINER_LOGS" \
         "${MOUNT_ARGS[@]}" \
         "${ENV_ARGS[@]}" \
         "$IMAGE" \
         --migrate "$CONTAINER_WORKSPACE" \
         --non-interactive \
         "${PASSTHROUGH_ARGS[@]}")
+    track_container "$container_id"
 
     info "Container: $container_id"
     "$RUNTIME" logs -f "$container_id" || true
     "$RUNTIME" wait "$container_id" > /dev/null 2>&1 || true
-
-    "$RUNTIME" rm "$container_id" > /dev/null 2>&1 || true
 
     info "Results in: $APP_PATH"
     info "Logs in: $LOGS_DEST/"
@@ -156,7 +214,7 @@ run_bake_mode() {
     local bake_tag="pf-baked-$(date +%s)"
     local temp_containerfile
     temp_containerfile=$(mktemp /tmp/pf-bake-XXXXXX)
-    trap "rm -f '$temp_containerfile'" EXIT
+    track_temp_file "$temp_containerfile"
 
     cat > "$temp_containerfile" <<EOF
 FROM $IMAGE
@@ -167,6 +225,7 @@ EOF
     info "Building baked image: $bake_tag"
     "$RUNTIME" build -t "$bake_tag" -f "$temp_containerfile" "$APP_PATH" \
         || die "Failed to build baked image"
+    track_bake_image "$bake_tag"
 
     info "Running migration in baked image"
     local container_id
@@ -177,28 +236,77 @@ EOF
         --migrate "$CONTAINER_WORKSPACE" \
         --non-interactive \
         "${PASSTHROUGH_ARGS[@]}")
+    track_container "$container_id"
 
     info "Container: $container_id"
     "$RUNTIME" logs -f "$container_id" || true
-    "$RUNTIME" wait "$container_id" > /dev/null 2>&1 || true
+    local container_exit=0
+    "$RUNTIME" wait "$container_id" > /dev/null 2>&1 || container_exit=$?
 
+    # Always sync results and logs, even on failure
     info "Syncing results from container"
-    "$RUNTIME" cp "$container_id:$CONTAINER_WORKSPACE/." "$APP_PATH/"
+    "$RUNTIME" cp "$container_id:$CONTAINER_WORKSPACE/." "$APP_PATH/" 2>/dev/null || true
 
     mkdir -p "$LOGS_DEST"
-    "$RUNTIME" cp "$container_id:/opt/patternfly-tools/logs/." "$LOGS_DEST/" 2>/dev/null || true
-
-    info "Cleaning up"
-    "$RUNTIME" rm "$container_id" > /dev/null 2>&1 || true
-    "$RUNTIME" rmi "$bake_tag" > /dev/null 2>&1 || true
+    "$RUNTIME" cp "$container_id:$CONTAINER_LOGS/." "$LOGS_DEST/" 2>/dev/null || true
 
     info "Results in: $APP_PATH"
     info "Logs in: $LOGS_DEST/"
 }
 
+# ── Run eval inside container ────────────────────────────────────────────
+run_eval() {
+    local branch="$1"
+    info "Running evaluation for branch: $branch"
+
+    local container_id
+    mkdir -p "$LOGS_DEST"
+
+    container_id=$("$RUNTIME" run -d \
+        -v "$APP_PATH:$CONTAINER_WORKSPACE:z" \
+        -v "$LOGS_DEST:$CONTAINER_LOGS:z" \
+        "${MOUNT_ARGS[@]}" \
+        "${ENV_ARGS[@]}" \
+        --entrypoint /opt/patternfly-tools/eval.sh \
+        "$IMAGE" \
+        --migrate "$CONTAINER_WORKSPACE" \
+        --branch "$branch" \
+        --base-branch "$BASE_BRANCH" \
+        --agent "$AGENT" \
+        --non-interactive)
+    track_container "$container_id"
+
+    info "Eval container: $container_id"
+    "$RUNTIME" logs -f "$container_id" || true
+    "$RUNTIME" wait "$container_id" > /dev/null 2>&1 || true
+
+    info "Eval logs in: $LOGS_DEST/"
+}
+
+# ── Detect migration branch from run.sh output ──────────────────────────
+detect_migration_branch() {
+    (cd "$APP_PATH" && git branch --list 'semver/goose/*' --sort=-committerdate | head -1 | tr -d ' *')
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────
-case "$MODE" in
-    mount) run_mount_mode ;;
-    bake)  run_bake_mode ;;
-    *)     die "Unknown mode: $MODE" ;;
-esac
+if [[ -n "$EVAL_ONLY_BRANCH" ]]; then
+    # Eval-only mode: skip migration, run eval directly
+    run_eval "$EVAL_ONLY_BRANCH"
+else
+    # Run migration
+    case "$MODE" in
+        mount) run_mount_mode ;;
+        bake)  run_bake_mode ;;
+        *)     die "Unknown mode: $MODE" ;;
+    esac
+
+    # Run eval after migration if enabled
+    if [[ "$ENABLE_EVAL" == true ]]; then
+        local_branch=$(detect_migration_branch)
+        if [[ -n "$local_branch" ]]; then
+            run_eval "$local_branch"
+        else
+            warn "Could not detect migration branch for evaluation"
+        fi
+    fi
+fi

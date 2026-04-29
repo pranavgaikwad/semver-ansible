@@ -1,17 +1,17 @@
-# PatternFly Migration Tools
+# PatternFly Migration Tools — Runner
 
-Automated migration toolkit for upgrading applications from PatternFly 5 to PatternFly 6. Combines static analysis, pattern-based code fixes, LLM-assisted fixes, and an AI agent for remaining changes.
+Migrate PatternFly 5 applications to PatternFly 6 using pre-packaged rules and AI-assisted fixes.
 
 ## Prerequisites
 
 - **Java JDK** with `JAVA_HOME` set
 - **AI agent** (one of): [Goose](https://github.com/block/goose), [Claude Code](https://docs.anthropic.com/en/docs/claude-code), or [OpenCode](https://github.com/opencode-ai/opencode)
 - **yq** or **python3** (for YAML-to-JSON conversion)
-- **unbuffer** (for MacOS 'brew install expect')
+- **unbuffer** (for MacOS `brew install expect`)
 
 For rule generation only:
 - **git**
-- **nvm** with Node.js 20.11.0
+- **nvm** with Node.js
 
 ## Quick Start
 
@@ -26,28 +26,33 @@ Or run interactively (prompts for options):
 ./run.sh
 ```
 
-## Usage
+## CLI Reference
 
-```
-./run.sh [OPTIONS]
+### Required
 
-Options:
-  --migrate <PATH>           Migrate the project at PATH
-  --generate-rules           Generate new PatternFly rules
-  --agent <NAME>             Agent: goose (default), claude, opencode
-  --rules-dir <PATH>         Custom rules directory
-  --llm-timeout <SECS>       LLM timeout (default: 300)
-  --from <REF>               --from for rule generation
-  --to <REF>                 --to for rule generation
-  --dep-from <REF>           --dep-from for rule generation
-  --dep-to <REF>             --dep-to for rule generation
-  --non-interactive          Skip all prompts
-  -h, --help                 Show help
-```
+| Option | Description |
+|--------|-------------|
+| `--migrate <PATH>` | Path to the application to migrate |
+
+### Optional
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--base-branch <NAME>` | `main` | Base branch to migrate from |
+| `--agent <NAME>` | `goose` | AI agent: `goose`, `claude`, `opencode` |
+| `--skip-agent` | off | Skip AI agent step (Phase 2), run only automated fixes |
+| `--rules-dir <PATH>` | pre-packaged | Use custom rules directory |
+| `--llm-timeout <SECS>` | `300` | Timeout per LLM operation |
+| `--non-interactive` | off | Skip all confirmation prompts |
+| `--generate-rules` | — | Generate new PatternFly rules (alternative mode) |
+| `-h, --help` | — | Show help |
 
 ## Migration Pipeline
 
-The migration runs in two phases, each prompted for confirmation:
+| Phase | Steps | Description |
+|-------|-------|-------------|
+| **Phase 1** | 1–7 | Kantra analysis → pattern fixes → LLM fixes → git commit |
+| **Phase 2** | 8 | AI agent for build errors and remaining issues → git commit |
 
 ### Phase 1: Automated analysis and fixes (steps 1-7)
 
@@ -71,6 +76,8 @@ After step 7, all automated changes are committed with the message "Apply automa
 
 The AI agent focuses on getting the app to build and pass tests — it collects all errors, groups them by root cause, and fixes them in batches.
 
+A migration branch `semver/goose/MMDDYY-HHMM` is created from the base branch before any changes. Skip Phase 2 with `--skip-agent`.
+
 ## Rule Generation
 
 To generate rules from a different PatternFly version range:
@@ -87,6 +94,15 @@ Non-interactive:
 ./run.sh --generate-rules --from v5.4.0 --to v6.4.1 --dep-from v5.4.0 --dep-to v6.4.0 --non-interactive
 ```
 
+### Rule generation options
+
+| Option | Description |
+|--------|-------------|
+| `--from <REF>` | PatternFly React source version tag |
+| `--to <REF>` | PatternFly React target version tag |
+| `--dep-from <REF>` | PatternFly CSS source version tag |
+| `--dep-to <REF>` | PatternFly CSS target version tag |
+
 ### Per-ref build configuration
 
 When the `--from` and `--to` refs require different Node.js versions or build commands, use the per-ref flags. For example, migrating **quipucords-ui** from PatternFly 5.3.3 (Node 18) to PatternFly 6.4.1 (Node 20):
@@ -99,8 +115,6 @@ When the `--from` and `--to` refs require different Node.js versions or build co
   --from-install-command "corepack yarn install" \
   --non-interactive
 ```
-
-Available per-ref flags:
 
 | Flag | Description |
 |------|-------------|
@@ -121,29 +135,45 @@ All are optional — when omitted, semver-analyzer uses its defaults.
 
 ## Logs
 
-Each run creates a timestamped log directory under `logs/`:
+Logs are written to `logs/<timestamp>/` relative to the script directory:
 
-```
-logs/20260416T140000/
-├── kantra.log
-├── fix-pattern.log
-├── fix-llm.log
-├── agent-goose.log      # or agent-claude.log / agent-opencode.log
-├── semver_analyze.log   # only for --generate-rules
-└── semver_konveyor.log
+| File | Contents |
+|------|----------|
+| `kantra.log` | Static analysis output |
+| `provider.log` | Frontend analyzer provider |
+| `fix-pattern.log` | Pattern-based fix output |
+| `fix-llm.log` | LLM-assisted fix output |
+| `agent-goose.log` | AI agent transcript |
+
+## Examples
+
+```bash
+# Basic migration
+./run.sh --migrate ~/code/my-app
+
+# Migrate from a specific branch
+./run.sh --migrate ~/code/my-app --base-branch develop
+
+# Automated fixes only (no AI agent)
+./run.sh --migrate ~/code/my-app --skip-agent --non-interactive
+
+# Generate fresh rules
+./run.sh --generate-rules --from v5.4.0 --to v6.4.1 --dep-from v5.4.0 --dep-to v6.4.0
 ```
 
-Long-running steps show a live timer and the `tail -f` command for following logs in another terminal.
+## Evaluation
 
-## Archive Contents
+Use `eval.sh` to evaluate migration quality:
 
+```bash
+./eval.sh --migrate /path/to/app --branch semver/goose/042926-1043
 ```
-patternfly-tools/
-├── .kantra/           # Kantra binary and assets
-├── bin/               # semver-analyzer, frontend-analyzer-provider, fix-engine-cli
-├── rules/             # Pre-generated migration rules and fix strategies
-├── prompt.md          # AI agent prompt
-├── MANIFEST           # Build metadata (git SHAs, rule count, versions)
-├── run.sh             # This runner
-└── README.md          # This file
-```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--migrate <PATH>` | — | Application path (required) |
+| `--branch <BRANCH>` | — | Migration branch to evaluate (required) |
+| `--base-branch <NAME>` | `main` | Base branch |
+| `--agent <NAME>` | `goose` | AI agent |
+
+Generates `pf-migration-comparison-report.html` in the logs directory.

@@ -23,7 +23,6 @@ FIX_BIN="$BIN_DIR/fix-engine-cli"
 KANTRA_BIN="$KANTRA_DIR/kantra"
 TOKEN_MAPPINGS="$SCRIPT_DIR/patternfly-token-mappings.yaml"
 PROMPT_FILE="$SCRIPT_DIR/prompt.md"
-EVAL_PROMPT_FILE="$SCRIPT_DIR/eval_prompt.md"
 LOGS_DIR="${LOGS_DIR:-$SCRIPT_DIR/logs/$(date -u +%Y%m%dT%H%M%S)}"
 PROVIDER_PORT=9002
 
@@ -36,7 +35,7 @@ AGENT="goose"
 LLM_TIMEOUT=300
 NON_INTERACTIVE=false
 BASE_BRANCH="main"
-ENABLE_EVAL=false
+SKIP_AGENT=false
 GEN_FROM="" GEN_TO="" GEN_DEP_FROM="" GEN_DEP_TO=""
 GEN_FROM_NODE_VERSION="" GEN_TO_NODE_VERSION=""
 GEN_FROM_INSTALL_CMD="" GEN_TO_INSTALL_CMD=""
@@ -157,7 +156,7 @@ Options:
   --dep-from <REF>           --dep-from for rule generation
   --dep-to <REF>             --dep-to for rule generation
   --base-branch <NAME>       Base branch to create migration branch from (default: main)
-  --enable-eval              Run evaluation agent after migration to assess quality
+  --skip-agent               Skip AI agent step (Phase 2)
 
   Per-Ref Build (rule generation):
   --from-node-version <V>    Node version for --from ref
@@ -185,7 +184,7 @@ while [[ $# -gt 0 ]]; do
         --dep-from)        GEN_DEP_FROM="$2"; shift 2 ;;
         --dep-to)          GEN_DEP_TO="$2"; shift 2 ;;
         --base-branch)     BASE_BRANCH="$2"; shift 2 ;;
-        --enable-eval)     ENABLE_EVAL=true; shift ;;
+        --skip-agent)      SKIP_AGENT=true; shift ;;
         --from-node-version)    GEN_FROM_NODE_VERSION="$2"; shift 2 ;;
         --to-node-version)      GEN_TO_NODE_VERSION="$2"; shift 2 ;;
         --from-install-command) GEN_FROM_INSTALL_CMD="$2"; shift 2 ;;
@@ -425,20 +424,29 @@ run_migration() {
     TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/pf-migrate.XXXXXX")
     mkdir -p "$LOGS_DIR" "$TEMP_DIR/kantra"
 
-    # Create migration branch from base
-    local migration_branch="semver/goose/$(date -u +%m%d%y-%H%M)"
-    info "Base branch: $BASE_BRANCH"
-    info "Creating migration branch: $migration_branch"
-    (cd "$MIGRATE_PATH" \
-        && git checkout "$BASE_BRANCH" \
-        && git checkout -b "$migration_branch") \
-        || die "Failed to create migration branch. Ensure '$BASE_BRANCH' exists in $MIGRATE_PATH"
+    local migration_branch
 
-    info "Project:   $MIGRATE_PATH"
-    info "Branch:    $migration_branch"
-    info "Rules:     $RULES_PATH"
-    info "Agent:     $AGENT"
-    info "Temp dir:  $TEMP_DIR"
+    if [[ -n "$EVAL_ONLY_BRANCH" ]]; then
+        migration_branch="$EVAL_ONLY_BRANCH"
+        info "Eval-only mode: using existing branch $migration_branch"
+        info "Project:   $MIGRATE_PATH"
+        info "Branch:    $migration_branch"
+    else
+        # Create migration branch from base
+        migration_branch="semver/goose/$(date -u +%m%d%y-%H%M)"
+        info "Base branch: $BASE_BRANCH"
+        info "Creating migration branch: $migration_branch"
+        (cd "$MIGRATE_PATH" \
+            && git checkout "$BASE_BRANCH" \
+            && git checkout -b "$migration_branch") \
+            || die "Failed to create migration branch. Ensure '$BASE_BRANCH' exists in $MIGRATE_PATH"
+
+        info "Project:   $MIGRATE_PATH"
+        info "Branch:    $migration_branch"
+        info "Rules:     $RULES_PATH"
+        info "Agent:     $AGENT"
+        info "Temp dir:  $TEMP_DIR"
+    fi
 
     # Determine semver_rules path
     local kantra_rules_dir
@@ -521,7 +529,9 @@ run_migration() {
     fi
 
     # ── Phase 2: AI agent ──
-    if confirm_step "Phase 2: Run AI agent ($AGENT) for remaining fixes?"; then
+    if [[ "$SKIP_AGENT" == true ]]; then
+        info "Skipping AI agent (--skip-agent)"
+    elif confirm_step "Phase 2: Run AI agent ($AGENT) for remaining fixes?"; then
         step "8/$total" "Running $AGENT for remaining fixes"
         run_agent "$MIGRATE_PATH"
 
@@ -534,57 +544,6 @@ run_migration() {
         info "Committed AI agent fixes"
     else
         info "Skipping Phase 2"
-    fi
-
-    # ── Phase 3: Evaluation (optional) ──
-    if [[ "$ENABLE_EVAL" == true ]]; then
-        step "9/9" "Running evaluation agent"
-        require_file "$EVAL_PROMPT_FILE"
-
-        local eval_prompt
-        eval_prompt=$(sed "s|\$ARGUMENTS|$BASE_BRANCH $migration_branch|g" "$EVAL_PROMPT_FILE")
-
-        local eval_prompt_tmp="$TEMP_DIR/eval_prompt.md"
-        echo "$eval_prompt" > "$eval_prompt_tmp"
-
-        pushd "$MIGRATE_PATH" > /dev/null || die "Failed to cd into $MIGRATE_PATH"
-
-        info "Running evaluation with: $BASE_BRANCH → $migration_branch"
-        info "Follow logs: tail -f $LOGS_DIR/eval-agent.log"
-        case "$AGENT" in
-            goose)
-                info "Running 'GOOSE_MODE=auto goose run -i $eval_prompt_tmp'"
-                unbuffer env GOOSE_MODE=auto goose run -i "$eval_prompt_tmp" \
-                    > "$LOGS_DIR/eval-agent.log" 2>&1 || {
-                    warn "Evaluation agent exited with non-zero status. Check $LOGS_DIR/eval-agent.log"
-                }
-                ;;
-            claude)
-                info "Running 'claude --allowedTools ... -p $eval_prompt_tmp'"
-                unbuffer claude --allowedTools "Bash" "Edit" "Write" "Read" "WebSearch" "WebFetch" \
-                    -p "$(cat "$eval_prompt_tmp")" \
-                    > "$LOGS_DIR/eval-agent.log" 2>&1 || {
-                    warn "Evaluation agent exited with non-zero status. Check $LOGS_DIR/eval-agent.log"
-                }
-                ;;
-            opencode)
-                info "Running 'opencode run $eval_prompt_tmp'"
-                unbuffer opencode run "$(cat "$eval_prompt_tmp")" \
-                    > "$LOGS_DIR/eval-agent.log" 2>&1 || {
-                    warn "Evaluation agent exited with non-zero status. Check $LOGS_DIR/eval-agent.log"
-                }
-                ;;
-        esac
-
-        popd > /dev/null
-
-        # Copy evaluation report to logs
-        if [[ -f "$MIGRATE_PATH/pf-migration-comparison-report.html" ]]; then
-            cp "$MIGRATE_PATH/pf-migration-comparison-report.html" "$LOGS_DIR/"
-            info "Evaluation report: $LOGS_DIR/pf-migration-comparison-report.html"
-        else
-            warn "Evaluation report not found at $MIGRATE_PATH/pf-migration-comparison-report.html"
-        fi
     fi
 
     printf "\n"

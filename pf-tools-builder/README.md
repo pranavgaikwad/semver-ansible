@@ -1,111 +1,167 @@
 # PatternFly Migration Tools
 
-Automated migration of PatternFly 5 applications to PatternFly 6. Runs static analysis, applies pattern-based and LLM-assisted fixes, and optionally invokes an AI agent for remaining issues.
+Automated migration of PatternFly 5 applications to PatternFly 6 using static analysis, pattern-based fixes, LLM-assisted fixes, and AI agent refinement.
 
-## Quick Start (Container)
+## Table of Contents
 
-The easiest way to run is via the container image. No local tool installation required — just Podman (or Docker) and GCP credentials for Vertex AI.
+- [Quick Start](#quick-start)
+- [Prerequisites](#prerequisites)
+- [Container Runner (run_container.sh)](#container-runner)
+- [Run Modes](#run-modes)
+- [Evaluation](#evaluation)
+- [Environment Variables](#environment-variables)
+- [Logs](#logs)
+- [Examples](#examples)
+- [Building the Container Image](#building-the-container-image)
+- [Running Without Container (run.sh)](#running-without-container)
+- [Building Archives (build.sh)](#building-archives)
+- [Source Repositories](#source-repositories)
 
-### Prerequisites
-
-- **Podman** or **Docker**
-- **GCP Vertex AI** credentials:
-  - `GCP_PROJECT_ID` and `GCP_LOCATION` environment variables
-  - Application Default Credentials at `~/.config/gcloud/application_default_credentials.json`
-
-### 1. Build the container image
-
-```bash
-cd dist/
-podman build -t localhost/semver-runner:latest -f Containerfile .
-```
-
-This is a multi-stage build that compiles all tools from source and generates migration rules. Takes 30-60 minutes on first build.
-
-### 2. Run the migration
+## Quick Start
 
 ```bash
+# Set GCP credentials
 export GCP_PROJECT_ID=my-gcp-project
 export GCP_LOCATION=us-east5
 
+# Run migration
 ./run_container.sh --migrate /path/to/your/app
 ```
 
-This will:
-1. Create a git branch `semver/goose/MMDDYY-HHMM` from `main`
-2. Run kantra static analysis against pre-generated PatternFly migration rules
-3. Apply pattern-based fixes (deterministic)
-4. Apply LLM-assisted fixes (via Goose + Vertex AI)
-5. Commit automated fixes
-6. Run Goose AI agent for remaining build/test fixes
-7. Commit agent fixes
+## Prerequisites
 
-Results appear directly in your app directory on the migration branch.
+| Requirement | Description |
+|-------------|-------------|
+| Podman or Docker | Container runtime |
+| `GCP_PROJECT_ID` | GCP project with Vertex AI access |
+| `GCP_LOCATION` | GCP region (e.g., `us-east5`) |
+| `~/.config/gcloud/application_default_credentials.json` | GCP Application Default Credentials |
 
-### Container CLI Options
+## Container Runner
 
-```
-./run_container.sh --migrate <PATH> [OPTIONS]
+### CLI Reference (`run_container.sh`)
 
-Required:
-  --migrate <PATH>           Path to the application to migrate
+#### Required
 
-Container options:
-  --bake                     Bake app into image instead of mounting
-  --goose-config <PATH>      Override goose config directory
-  --image <NAME>             Container image (default: localhost/semver-runner:latest)
-  --enable-eval              Run evaluation agent after migration
+| Option | Description |
+|--------|-------------|
+| `--migrate <PATH>` | Path to the application to migrate |
 
-Options forwarded to run.sh:
-  --agent <NAME>             AI agent: goose (default), claude, opencode
-  --base-branch <NAME>       Base branch (default: main)
-  --non-interactive          Skip all prompts
-```
+#### Optional — Container
 
-### Environment Variables
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--bake` | off | Bake app into image instead of mounting |
+| `--goose-config <PATH>` | baked default | Override goose config directory |
+| `--image <NAME>` | `quay.io/pranavgaikwad/patternfly-tools:latest` | Container image |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GCP_PROJECT_ID` | Yes | GCP project with Vertex AI access |
-| `GCP_LOCATION` | Yes | GCP region (e.g., `us-east5`) |
-| `GOOSE_PROVIDER` | No | Override LLM provider (default: `gcp_vertex_ai`) |
-| `GOOSE_MODEL` | No | Override model (default: `claude-opus-4-6`) |
+#### Optional — Migration
 
-### Run Modes
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--base-branch <NAME>` | `main` | Branch of the application to migrate |
+| `--skip-agent` | off | Skip AI agent step (Phase 2) |
+| `--llm-timeout <SECS>` | `300` | LLM timeout per fix |
+| `--non-interactive` | off | Skip all prompts |
 
-**Mount mode** (default):
+#### Optional — Evaluation
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--enable-eval` | off | Run evaluation after migration |
+| `--eval-only <BRANCH>` | — | Evaluate an existing migrated branch (skips migration) |
+
+## Run Modes
+
+### Mount mode (default)
+
+Mounts the app directory into the container. Changes are applied in real-time on the host.
+
 ```bash
 ./run_container.sh --migrate /path/to/app
 ```
-Mounts your app directory into the container. Changes are applied in real-time.
 
-**Bake mode** (for slow mounts, e.g., Docker on Mac):
+### Bake mode
+
+Copies the app into a temporary image, runs migration inside it, then syncs results back. Use this when mount performance is slow (e.g., Docker on Mac).
+
 ```bash
 ./run_container.sh --bake --migrate /path/to/app
 ```
-Copies the app into a temporary image, runs migration inside it, then syncs results back.
 
-### Goose Configuration
+## Migration Pipeline
 
-The image includes a default Goose config using GCP Vertex AI with Claude. To override:
+The migration runs in two phases:
 
-```bash
-./run_container.sh --goose-config ~/.config/goose --migrate /path/to/app
-```
+| Phase | Steps | Description |
+|-------|-------|-------------|
+| **Phase 1** | 1–7 | Automated analysis and fixes |
+| **Phase 2** | 8 | AI agent for remaining issues |
 
-### Evaluation
+### Phase 1 — Automated
 
-To run a post-migration evaluation that compares the base branch with the migration branch:
+| Step | Description |
+|------|-------------|
+| 1 | Generate provider settings |
+| 2 | Start frontend-analyzer-provider |
+| 3 | Run kantra static analysis |
+| 4 | Stop provider |
+| 5 | Convert kantra YAML output to JSON |
+| 6 | Apply pattern-based fixes (deterministic) |
+| 7 | Apply LLM-based fixes (via Goose + Vertex AI) |
+
+After Phase 1, all changes are committed as "Apply automated migration fixes (pattern-based + LLM)".
+
+### Phase 2 — AI Agent
+
+Step 8 runs Goose to fix remaining build errors, type issues, and test failures. Changes are committed as "Apply AI agent fixes (goose)".
+
+Skip with `--skip-agent`.
+
+## Evaluation
+
+Evaluation compares a migration branch against a pf-codemods baseline and generates an HTML report.
+
+### After migration
 
 ```bash
 ./run_container.sh --enable-eval --migrate /path/to/app
 ```
 
-This runs an evaluation agent that generates `pf-migration-comparison-report.html` in the logs directory.
+### Evaluate an existing branch
 
-### Logs
+```bash
+./run_container.sh --eval-only my-migration-branch --migrate /path/to/app
+```
 
-Logs are saved to `.pf-migration-logs/` in the directory where you run the script:
+The evaluation:
+1. Creates a `pf-codemods-MMDDYY-HHMM` branch from the base, runs `npx @patternfly/pf-codemods@latest --v6 --fix`
+2. Runs the evaluation agent comparing base → pf-codemods → migration branch
+3. Generates `pf-migration-comparison-report.html` in the logs directory
+4. Deletes the pf-codemods branch
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GCP_PROJECT_ID` | Yes | GCP project with Vertex AI access |
+| `GCP_LOCATION` | Yes | GCP region |
+| `GOOSE_PROVIDER` | No | Override LLM provider (default: `gcp_vertex_ai`) |
+| `GOOSE_MODEL` | No | Override model (default: `claude-opus-4-6`) |
+
+GCP credentials at `~/.config/gcloud/` are auto-mounted when present.
+
+## Goose Configuration
+
+The image includes a default Goose config using GCP Vertex AI with Claude. To use your own:
+
+```bash
+./run_container.sh --goose-config ~/.config/goose --migrate /path/to/app
+```
+
+## Logs
+
+Logs are saved to `.pf-migration-logs/<timestamp>/` in the directory where you run the script.
 
 | File | Contents |
 |------|----------|
@@ -117,34 +173,56 @@ Logs are saved to `.pf-migration-logs/` in the directory where you run the scrip
 | `eval-agent.log` | Evaluation agent transcript (if `--enable-eval`) |
 | `pf-migration-comparison-report.html` | Evaluation report (if `--enable-eval`) |
 
-### Examples
+## Examples
 
-Basic migration:
+### Basic migration
+
 ```bash
 export GCP_PROJECT_ID=my-project GCP_LOCATION=us-east5
 ./run_container.sh --migrate ~/code/my-pf5-app
 ```
 
-Migration from a specific branch:
+### Migrate from a specific branch
+
 ```bash
 ./run_container.sh --migrate ~/code/my-app --base-branch develop
 ```
 
-Migration with evaluation:
+### Migration without AI agent (Phase 1 only)
+
 ```bash
-./run_container.sh --migrate ~/code/my-app --enable-eval
+./run_container.sh --migrate ~/code/my-app --skip-agent
 ```
 
-Bake mode with custom goose config:
+### Migration with evaluation
+
+```bash
+./run_container.sh --enable-eval --migrate ~/code/my-app
+```
+
+### Evaluate an existing migration branch
+
+```bash
+./run_container.sh --eval-only semver/goose/042926-1043 --migrate ~/code/my-app
+```
+
+### Bake mode with custom goose config
+
 ```bash
 ./run_container.sh --bake --goose-config ~/.config/goose --migrate ~/code/my-app
+```
+
+### Use a custom container image
+
+```bash
+./run_container.sh --image localhost/semver-runner:latest --migrate ~/code/my-app
 ```
 
 ---
 
 ## Building the Container Image
 
-The `Containerfile` uses a multi-stage build:
+The `Containerfile` uses a 4-stage multi-stage build:
 
 | Stage | Base Image | Purpose |
 |-------|-----------|---------|
@@ -153,65 +231,62 @@ The `Containerfile` uses a multi-stage build:
 | 3 | `ubi9/nodejs-20` | Generate pre-packaged migration rules |
 | 4 | `ubi9/ubi-minimal` | Runtime with Java, Maven, Goose, yq |
 
-### Build Args
-
-Override PatternFly versions or repo URLs at build time:
-
 ```bash
-podman build \
-  --build-arg PF_REACT_FROM=v5.4.0 \
-  --build-arg PF_REACT_TO=v6.4.1 \
-  --build-arg KANTRA_VERSION=v0.9.2-rc.1 \
-  -t localhost/semver-runner:latest \
-  -f Containerfile .
+podman build -t localhost/semver-runner:latest -f Containerfile .
 ```
+
+### Build args
+
+| Arg | Default | Description |
+|-----|---------|-------------|
+| `KANTRA_VERSION` | `v0.9.2-rc.1` | Kantra release for assets |
+| `PF_REACT_FROM` | `v5.4.0` | PatternFly React source version |
+| `PF_REACT_TO` | `v6.4.1` | PatternFly React target version |
+| `PF_DEP_FROM` | `v5.4.0` | PatternFly CSS source version |
+| `PF_DEP_TO` | `v6.4.0` | PatternFly CSS target version |
 
 ---
 
-## Building Without Container (build.sh)
+## Running Without Container
 
-For building a distributable ZIP archive with platform-specific binaries.
+### run.sh
 
-### Prerequisites
+Runs the migration directly on the host. Requires Java JDK, Maven, Goose CLI, yq or python3, git.
 
-| Tool | Install |
-|------|---------|
-| go | https://go.dev/dl/ |
-| cargo + rustup | https://rustup.rs/ |
-| git, curl, unzip, python3 | System package manager |
-| nvm | https://github.com/nvm-sh/nvm |
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--migrate <PATH>` | — | Project to migrate (required) |
+| `--base-branch <NAME>` | `main` | Base branch |
+| `--agent <NAME>` | `goose` | AI agent: goose, claude, opencode |
+| `--skip-agent` | off | Skip AI agent step |
+| `--rules-dir <PATH>` | pre-packaged | Custom rules directory |
+| `--llm-timeout <SECS>` | `300` | LLM timeout |
+| `--non-interactive` | off | Skip prompts |
+| `--generate-rules` | — | Generate new rules instead of migrating |
 
-### Usage
+### eval.sh
+
+Runs evaluation against an existing migrated branch.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--migrate <PATH>` | — | Project path (required) |
+| `--branch <BRANCH>` | — | Migration branch to evaluate (required) |
+| `--base-branch <NAME>` | `main` | Base branch |
+| `--agent <NAME>` | `goose` | AI agent |
+| `--non-interactive` | off | Skip prompts |
+
+---
+
+## Building Archives
+
+For building a distributable ZIP without containers. See `build.sh`.
 
 ```bash
 ./build.sh
 ```
 
-Prompts for target platform and kantra release, then builds everything and packages as `patternfly_tools_<platform>.zip`.
-
-### Overriding Repos
-
-All repo URLs and branches are overridable via environment variables:
-
-```bash
-SEMVER_REPO_URL=https://github.com/my-fork/semver-analyzer.git \
-SEMVER_REPO_BRANCH=my-branch \
-./build.sh
-```
-
----
-
-## Running Without Container (run.sh)
-
-The `run.sh` script can run directly on the host if all tools are installed:
-
-```bash
-./run.sh --migrate /path/to/app --agent goose
-```
-
-Requires: Java JDK, Maven, Goose CLI, yq or python3, git.
-
-See `./run.sh --help` for all options.
+Prompts for target platform and kantra release. All repo URLs/branches are overridable via environment variables.
 
 ---
 
