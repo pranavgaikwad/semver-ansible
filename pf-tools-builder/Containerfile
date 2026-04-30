@@ -148,9 +148,13 @@ RUN microdnf install -y --nodocs \
     tar \
     libgomp \
     expect \
-    nodejs \
-    npm \
     && microdnf clean all
+
+# Node.js 20 (pf-codemods requires >=18, UBI9 microdnf only has v16)
+RUN curl -fsSL https://rpm.nodesource.com/setup_20.x | bash - \
+    && microdnf install -y --nodocs nodejs \
+    && microdnf clean all \
+    && corepack enable
 
 # yq
 ARG TARGETARCH=amd64
