@@ -180,12 +180,84 @@ esac
 
 popd > /dev/null
 
-# Copy evaluation report to logs
-if [[ -f "$MIGRATE_PATH/pf-migration-comparison-report.html" ]]; then
-    cp "$MIGRATE_PATH/pf-migration-comparison-report.html" "$LOGS_DIR/"
+# Copy evaluation report to logs and inject stats
+REPORT_FILE="$MIGRATE_PATH/pf-migration-comparison-report.html"
+STATS_FILE="$MIGRATE_PATH/.pf-migration/stats.json"
+
+if [[ -f "$REPORT_FILE" ]]; then
+    # Inject stats section if stats.json exists
+    if [[ -f "$STATS_FILE" ]]; then
+        info "Injecting migration stats into report"
+        python3 -c "
+import json, sys
+
+with open(sys.argv[1]) as f:
+    stats = json.load(f)
+
+timing = stats.get('timing', {})
+migration = stats.get('migration', {})
+tokens = stats.get('tokens', {})
+
+def fmt_time(secs):
+    m, s = divmod(secs, 60)
+    return f'{m}m {s}s'
+
+html = '''
+<section id=\"migration-stats\" style=\"margin-top: 2rem;\">
+<h2 style=\"color: var(--accent, #58a6ff); border-bottom: 2px solid var(--accent, #58a6ff); padding-bottom: 0.5rem;\">Migration Stats</h2>
+<div style=\"display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1rem;\">
+  <div style=\"background: var(--surface, #161b22); border: 1px solid var(--border, #30363d); border-radius: 8px; padding: 1rem;\">
+    <h3 style=\"color: var(--teal, #39d2c0); margin: 0 0 0.5rem 0; font-size: 1rem;\">Timing</h3>
+    <div style=\"display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border, #30363d);\">
+      <span style=\"color: var(--text-muted, #8b949e);\">Fix Engine fixes</span>
+      <span>''' + fmt_time(timing.get('phase1_secs', 0)) + '''</span>
+    </div>
+    <div style=\"display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border, #30363d);\">
+      <span style=\"color: var(--text-muted, #8b949e);\">Agent fixes</span>
+      <span>''' + fmt_time(timing.get('phase2_secs', 0)) + '''</span>
+    </div>
+    <div style=\"display: flex; justify-content: space-between; padding: 0.25rem 0; font-weight: bold;\">
+      <span>Total</span>
+      <span>''' + fmt_time(timing.get('total_secs', 0)) + '''</span>
+    </div>
+  </div>
+  <div style=\"background: var(--surface, #161b22); border: 1px solid var(--border, #30363d); border-radius: 8px; padding: 1rem;\">
+    <h3 style=\"color: var(--teal, #39d2c0); margin: 0 0 0.5rem 0; font-size: 1rem;\">Migration</h3>
+    <div style=\"display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border, #30363d);\">
+      <span style=\"color: var(--text-muted, #8b949e);\">Branch</span>
+      <span><code>''' + migration.get('branch', 'N/A') + '''</code></span>
+    </div>
+    <div style=\"display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border, #30363d);\">
+      <span style=\"color: var(--text-muted, #8b949e);\">Base</span>
+      <span><code>''' + migration.get('base_branch', 'N/A') + '''</code></span>
+    </div>
+    <div style=\"display: flex; justify-content: space-between; padding: 0.25rem 0;\">
+      <span style=\"color: var(--text-muted, #8b949e);\">Timestamp</span>
+      <span>''' + migration.get('timestamp', 'N/A') + '''</span>
+    </div>
+  </div>
+  <div style=\"background: var(--surface, #161b22); border: 1px solid var(--border, #30363d); border-radius: 8px; padding: 1rem;\">
+    <h3 style=\"color: var(--teal, #39d2c0); margin: 0 0 0.5rem 0; font-size: 1rem;\">Token Usage</h3>
+    <pre style=\"background: var(--surface2, #1c2129); padding: 0.5rem; border-radius: 4px; font-size: 0.8rem; overflow-x: auto;\">''' + json.dumps(tokens, indent=2) + '''</pre>
+  </div>
+</div>
+</section>
+'''
+
+with open(sys.argv[2]) as f:
+    report = f.read()
+
+report = report.replace('</body>', html + '</body>')
+
+with open(sys.argv[2], 'w') as f:
+    f.write(report)
+" "$STATS_FILE" "$REPORT_FILE" 2>/dev/null || warn "Failed to inject stats into report"
+    fi
+
+    cp "$REPORT_FILE" "$LOGS_DIR/"
     info "Evaluation report: $LOGS_DIR/pf-migration-comparison-report.html"
 else
-    warn "Evaluation report not found at $MIGRATE_PATH/pf-migration-comparison-report.html"
+    warn "Evaluation report not found at $REPORT_FILE"
 fi
 
 # ── Step 3: Cleanup pf-codemods branch ───────────────────────────────────

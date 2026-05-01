@@ -199,163 +199,39 @@ Do not make vague claims like “seems better” or “probably more complete”
 7. Treat official PatternFly documentation and release guidance as authoritative.
 
 
-Your final output must be an interactive HTML report saved to `pf-migration-comparison-report.html` in the project root.
+Save the report as `pf-migration-comparison-report.html` in the project root.
 
-# Report Format Specification
+# Report Format
 
-The report MUST follow this exact structure, styling, and HTML/CSS template. Consistency across runs is critical.
+Dark-themed interactive HTML report. Use CSS variables: `--bg: #0d1117; --surface: #161b22; --surface2: #1c2129; --border: #30363d; --text: #e6edf3; --text-muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149; --orange: #d29922; --purple: #bc8cff; --teal: #39d2c0`. System font stack. Max-width 1400px.
 
-## Report sections (in order)
+## Required sections (in order)
 
-### 1. Final verdict banner
-- Green-bordered card at the top with gradient background
-- If multiple branches: shows “Winner: Branch X” in large green text
-- If single branch: shows “Assessment: Branch X — N / 10” with green (≥8), orange (5-7), or red (<5)
-- One score card per migration branch, side by side in a flex row
-- Winner card has green border; worst score gets red; others get orange
-- 3-7 bullet points summarizing decisive reasons
+1. **Verdict banner** — green-bordered card. Winner (or score out of 10 if single branch). Score cards per branch (green=winner, red=worst, orange=other). Key reasons as bullets.
 
-### 2. Table of Contents
-- Numbered, linked list inside a bordered card
-- Links to all major sections
+2. **Table of Contents** — linked list to all sections.
 
-### 3. Branch Overview & Stats
-- One card per migration branch, side by side (use CSS grid; set `grid-template-columns: repeat(N, 1fr)` where N = number of migration branches, capped at 4 columns — wrap to next row if more)
-- Winner card gets class `best` (green border)
-- Each card shows: branch name, commit count, files changed, insertions, deletions, package.json updated (Yes/No), CSS/SCSS updated (Yes/No), build result, remaining pf-v5 references
-- Use metric rows with label on left, value on right
-- Color values: green for good, red for bad, orange for warnings
+3. **Branch Overview** — N-column card grid. Per card: branch name, commit count, files changed, insertions/deletions, package.json updated, CSS updated, build result, remaining pf-v5 refs. Color-code metrics (green/red/orange).
 
-### 4. Build Error Comparison
-- Horizontal bar chart showing error count per branch
-- Red bar for most errors, orange for medium, green for fewest
+4. **Build Error Comparison** — horizontal bar chart, one row per branch.
 
-### 5. Side-by-Side Scoring Tables
-- Summary table: Category | Max | one column per migration branch | Winner
-- Bold total row at bottom
-- Detailed breakdown table: Area | Sub-area | one “findings” column per migration branch | Winner | Evidence
-- Use rowspan for area grouping
-- Winner cells get class `winner-cell` (green), losers get `loser-cell` (red), ties get `tie-cell` (orange)
-- Winner badges: `<span class=”badge badge-green”>BranchName</span>`, ties: `badge-orange`, special wins: `badge-blue`
+5. **Scoring Tables** — summary table (Category | Max | per-branch scores | Winner) with bold totals. Detailed breakdown with rowspan grouping. Use badge classes: `.badge-green`, `.badge-red`, `.badge-orange`.
 
-### 6. Detailed discussion sections (one per migration area)
-Each area gets its own `<h2>` with an id for linking. Within each area, use collapsible `<details>` elements (first one open):
-- `<summary>` = area name
-- Inside `.content` div:
-  - Brief explanation of what changed in PF6 with link to official docs
-  - PF5 “Before” code block in `<pre><code>`
-  - PF6 “After” code block in `<pre><code>`
-  - Small comparison table with one row per migration branch: Branch | Status | Notes
-  - Winner badge and explanation (or just assessment badge if single branch)
+6. **Detailed Analysis** — collapsible `<details>` per migration area. Each includes: what changed in PF6, before/after code blocks, per-branch comparison table, winner badge. Cover: package upgrades, component API changes (EmptyState, Modal, Dropdown, Button, Flex, FormGroup, Nav, Label, Tabs, etc.), CSS class/variable/token migrations, scope discipline.
 
-Areas to cover (each as a separate `<details>`):
-- Package version upgrades (always include full table of all PF packages)
-- Text/Content migration
-- EmptyState restructuring
-- Tile → Card
-- Modal migration
-- DataListItemCells removal
-- InputGroupItem / DescriptionListGroup
-- PageSection variant
-- ExpandableSection onToggle
-- Dropdown/Select onSelect
-- Button icon prop
-- Flex spaceItems → gap
-- FormGroup labelIcon → labelHelp
-- Nav theme removal
-- Label color changes
-- Tabs eventKey type
-- Charts import path
-- CSS class prefix migration (with bar chart of remaining pf-v5 refs)
-- React token imports (with table mapping old → new per branch)
-- CSS variable tokens (spacers, colors, backgrounds, borders, fonts, breakpoints)
-- Scope discipline / unrelated changes
+7. **Build Results** — per-branch with green/orange/red badge, error summary table (Type | Count | Root Cause), build progress bar.
 
-### 7. Build Results section
-- Per-branch subsection with badge (green/orange/red)
-- Error summary table: Error Type | Count | Root Cause
-- For the passing branch, list warnings and note they are pre-existing
-- Build summary progress bar at bottom
+8. **Risk & Maintainability** — N-column card grid. Metrics: placeholder tokens, stale CSS, package alignment, runtime risk, remaining work.
 
-### 8. Risk & Maintainability
-- One card per migration branch, same grid as overview
-- Metrics: placeholder tokens, stale CSS classes, package alignment, missing deps, runtime risk, manual work remaining
-- List remaining migration gaps common to all branches
+9. **Final Totals & Recommendation** — verdict card with score table, merge recommendation, remaining work per branch.
 
-### 9. Final Totals & Recommendation
-- Inside a verdict-styled card (green border, gradient background)
-- Score table: Category (max) | one column per migration branch
-- Bold total row with colored scores
-- “Recommendation” section with bold merge recommendation
-- “Remaining work” on winning branch
-- For each non-winning branch: “If fixing [branch] instead” section with prioritized fix list
+10. **Footer** — link to PatternFly Upgrade Guide, Tokens docs, Release Notes.
 
-## CSS Theme (use exactly these variables and styles)
+## Visualizations
 
-```css
-:root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --surface2: #1c2129;
-  --border: #30363d;
-  --text: #e6edf3;
-  --text-muted: #8b949e;
-  --accent: #58a6ff;
-  --green: #3fb950;
-  --red: #f85149;
-  --orange: #d29922;
-  --purple: #bc8cff;
-  --teal: #39d2c0;
-}
-```
-
-- Body: dark background (`--bg`), light text, max-width 1400px, 2rem padding
-- Font: system font stack (-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif)
-- h1: 1.8rem, blue accent bottom border
-- h2: 1.4rem, blue accent color, top margin 2rem, bottom border
-- h3: 1.15rem, purple color
-- h4: 1rem, teal color
-- Tables: full width, collapsed borders, 0.85rem font, dark surface cells, sticky headers
-- Code: dark surface2 background, orange text, 4px border-radius
-- Pre blocks: surface2 background, 1rem padding, 8px radius, border
-
-## CSS Component Classes
-
-- `.verdict`: green border, gradient bg (#1a3a2a → #162b22), 12px radius, 1.5rem padding
-- `.score-card`: surface bg, 8px radius, border. `.winner-card` gets green border
-- `.compare-grid`: CSS grid, `repeat(N, 1fr)` columns where N = number of migration branches (cap at 4; wrap if more). Falls to 1 column under 900px
-- `.compare-card`: surface bg, border, 8px radius. `.best` gets green border
-- `.metric`: flex row, space-between, bottom border. `.good`=green, `.bad`=red, `.warn`=orange
-- `.badge`: inline-block, 12px radius, 0.8rem font. Variants: `.badge-green`, `.badge-red`, `.badge-orange`, `.badge-blue` (each with matching 15% opacity bg + solid border)
-- `.bar-chart` / `.bar-row` / `.bar-track` / `.bar-fill`: horizontal bar chart components
-- `.progress-bar`: flex row, 24px height, 6px radius, segments with colors
-- `details`: surface bg, border, 8px radius, overflow hidden. Summary has pointer cursor, hover bg. Open summary gets bottom border
-- `.winner-cell`: green + bold. `.loser-cell`: red. `.tie-cell`: orange
-
-## Visualization requirements
-
-- Build errors: horizontal bar chart with one row per migration branch (percentage width relative to max errors)
-- Remaining pf-v5 references: horizontal bar chart with one row per migration branch
-- Build summary: segmented progress bar with one segment per migration branch
-- Branch overview: N-column card grid with metrics (N = number of migration branches)
-- Risk assessment: N-column card grid with metrics
-- Scores: score cards in flex row, one per migration branch
-
-## Footer
-
-```html
-<p style=”color: var(--text-muted); margin-top: 2rem; text-align: center; font-size: 0.85rem;”>
-  Report generated by Claude Code migration analysis &bull; Sources:
-  <a href=”https://www.patternfly.org/get-started/upgrade/”>PatternFly Upgrade Guide</a>,
-  <a href=”https://www.patternfly.org/tokens/develop-with-tokens/”>PatternFly Tokens</a>,
-  <a href=”https://www.patternfly.org/get-started/upgrade/release-notes/”>PF6 Release Notes</a>
-</p>
-```
+Use horizontal bar charts for error counts and pf-v5 reference counts. Card grids for branch overviews and risk. Segmented progress bars for build summaries. All responsive (1 column under 900px).
 
 # Quality bar
 
-Your report should be rigorous enough that an engineering lead could use it to decide which branch to merge.
-
-Be systematic, skeptical, and evidence-based.
-Research first. Compare second. Build third. Conclude last.
+Rigorous enough for an engineering lead to decide which branch to merge. Evidence-driven — cite code, build output, and web research. No vague claims.
 
