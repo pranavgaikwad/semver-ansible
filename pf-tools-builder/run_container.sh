@@ -30,8 +30,13 @@ cleanup() {
             warn "Shell:   $RUNTIME exec -it <container_id> bash"
             warn "Remove:  $RUNTIME rm -f <container_id>"
         fi
+    elif [[ "$KEEP_CONTAINER" == true ]]; then
+        if [[ -n "$CONTAINER_IDS" ]]; then
+            info "Containers kept (--keep): $CONTAINER_IDS"
+            info "Shell:   $RUNTIME exec -it <container_id> bash"
+            info "Remove:  $RUNTIME rm -f <container_id>"
+        fi
     else
-        # Only clean up containers on success
         for cid in $CONTAINER_IDS; do
             "$RUNTIME" stop "$cid" > /dev/null 2>&1 || true
             "$RUNTIME" rm "$cid" > /dev/null 2>&1 || true
@@ -71,6 +76,7 @@ ENABLE_EVAL=false
 EVAL_ONLY_BRANCH=""
 BASE_BRANCH="main"
 AGENT="goose"
+KEEP_CONTAINER=false
 PASSTHROUGH_ARGS=()
 
 # ── Usage ────────────────────────────────────────────────────────────────
@@ -87,6 +93,7 @@ Container options:
   --bake                     Bake app into image instead of mounting (for slow mounts)
   --goose-config <PATH>      Override goose config directory
   --image <NAME>             Container image (default: quay.io/pranavgaikwad/patternfly-tools:latest)
+  --keep                     Keep container after completion (for debugging)
 
 Evaluation options:
   --enable-eval              Run evaluation after migration
@@ -121,6 +128,7 @@ while [[ $# -gt 0 ]]; do
         --goose-config)   GOOSE_CONFIG="$2"; shift 2 ;;
         --image)          IMAGE="$2"; shift 2 ;;
         --enable-eval)    ENABLE_EVAL=true; shift ;;
+        --keep)           KEEP_CONTAINER=true; shift ;;
         --eval-only)      ENABLE_EVAL=true; EVAL_ONLY_BRANCH="$2"; shift 2 ;;
         --base-branch)    BASE_BRANCH="$2"; PASSTHROUGH_ARGS+=("--base-branch" "$2"); shift 2 ;;
         --agent)          AGENT="$2"; PASSTHROUGH_ARGS+=("--agent" "$2"); shift 2 ;;
@@ -135,8 +143,10 @@ done
 [[ -d "$APP_PATH" ]] || die "Not a directory: $APP_PATH"
 APP_PATH="$(cd "$APP_PATH" && pwd)"
 
-[[ -z "${GCP_PROJECT_ID:-}" ]] && die "GCP_PROJECT_ID is not set. Export it before running (e.g., export GCP_PROJECT_ID=my-project)"
-[[ -z "${GCP_LOCATION:-}" ]] && die "GCP_LOCATION is not set. Export it before running (e.g., export GCP_LOCATION=us-east5)"
+if [[ "${GOOSE_PROVIDER:-gcp_vertex_ai}" == "gcp_vertex_ai" ]]; then
+    [[ -z "${GCP_PROJECT_ID:-}" ]] && die "GCP_PROJECT_ID is not set. Export it before running (e.g., export GCP_PROJECT_ID=my-project)"
+    [[ -z "${GCP_LOCATION:-}" ]] && die "GCP_LOCATION is not set. Export it before running (e.g., export GCP_LOCATION=us-east5)"
+fi
 
 RUNTIME=$(detect_runtime)
 info "Container runtime: $RUNTIME"
@@ -167,7 +177,7 @@ fi
 # ── Environment variable passthrough ─────────────────────────────────────
 ENV_ARGS=()
 for var in GOOSE_PROVIDER GOOSE_MODEL GOOSE_API_KEY \
-           ANTHROPIC_API_KEY OPENAI_API_KEY \
+           ANTHROPIC_API_KEY OPENAI_API_KEY GOOGLE_API_KEY \
            GCP_PROJECT_ID GCP_LOCATION; do
     if [[ -n "${!var:-}" ]]; then
         ENV_ARGS+=(-e "$var=${!var}")
