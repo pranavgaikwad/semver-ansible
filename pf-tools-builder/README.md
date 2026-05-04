@@ -20,11 +20,13 @@ Automated migration of PatternFly 5 applications to PatternFly 6 using static an
 ## Quick Start
 
 ```bash
-# Set GCP credentials
+# Using GCP Vertex AI (default)
 export GCP_PROJECT_ID=my-gcp-project
 export GCP_LOCATION=us-east5
+./run_container.sh --migrate /path/to/your/app
 
-# Run migration
+# Or using OpenAI
+export GOOSE_PROVIDER=openai OPENAI_API_KEY=sk-...
 ./run_container.sh --migrate /path/to/your/app
 ```
 
@@ -33,9 +35,7 @@ export GCP_LOCATION=us-east5
 | Requirement | Description |
 |-------------|-------------|
 | Podman or Docker | Container runtime |
-| `GCP_PROJECT_ID` | GCP project with Vertex AI access |
-| `GCP_LOCATION` | GCP region (e.g., `us-east5`) |
-| `~/.config/gcloud/application_default_credentials.json` | GCP Application Default Credentials |
+| LLM credentials | See [LLM Providers](#llm-providers) below |
 
 ## Container Runner
 
@@ -140,20 +140,53 @@ The evaluation:
 3. Generates `pf-migration-comparison-report.html` in the logs directory
 4. Deletes the pf-codemods branch
 
-## Environment Variables
+## LLM Providers
+
+The default provider is GCP Vertex AI. Override by setting `GOOSE_PROVIDER` and the corresponding API key.
+
+### GCP Vertex AI (default)
+
+```bash
+export GCP_PROJECT_ID=my-gcp-project
+export GCP_LOCATION=us-east5
+./run_container.sh --migrate /path/to/app
+```
+
+Requires `~/.config/gcloud/application_default_credentials.json` (auto-mounted when present). Generate with `gcloud auth application-default login`.
+
+### OpenAI
+
+```bash
+export GOOSE_PROVIDER=openai
+export GOOSE_MODEL=gpt-4o
+export OPENAI_API_KEY=sk-...
+./run_container.sh --migrate /path/to/app
+```
+
+### Google Gemini
+
+```bash
+export GOOSE_PROVIDER=google
+export GOOSE_MODEL=gemini-2.5-flash
+export GOOGLE_API_KEY=AIza...
+./run_container.sh --migrate /path/to/app
+```
+
+### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GCP_PROJECT_ID` | Yes | GCP project with Vertex AI access |
-| `GCP_LOCATION` | Yes | GCP region |
-| `GOOSE_PROVIDER` | No | Override LLM provider (default: `gcp_vertex_ai`) |
-| `GOOSE_MODEL` | No | Override model (default: `claude-opus-4-6`) |
-
-GCP credentials at `~/.config/gcloud/` are auto-mounted when present.
+| `GOOSE_PROVIDER` | No | LLM provider (default: `gcp_vertex_ai`) |
+| `GOOSE_MODEL` | No | Model name (default: `claude-opus-4-6`) |
+| `GCP_PROJECT_ID` | Vertex AI only | GCP project ID |
+| `GCP_LOCATION` | Vertex AI only | GCP region |
+| `OPENAI_API_KEY` | OpenAI only | OpenAI API key |
+| `GOOGLE_API_KEY` | Gemini only | Google AI API key |
+| `ANTHROPIC_API_KEY` | Anthropic only | Anthropic API key |
 
 ## Goose Configuration
 
-The image includes a default Goose config using GCP Vertex AI with Claude. To use your own:
+The image includes a default Goose config using GCP Vertex AI. To use your own:
 
 ```bash
 ./run_container.sh --goose-config ~/.config/goose --migrate /path/to/app

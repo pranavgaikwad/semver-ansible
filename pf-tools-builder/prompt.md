@@ -1,5 +1,7 @@
 This application has been migrated from PatternFly 5 to PatternFly 6 using automated tools. Pattern-based and LLM-assisted fixes have already been applied. Your job is to get the application into a building and working state.
 
+Ensure all @patternfly/* packages are upgraded to PatternFly 6 versions and lock files are consistent with the updated dependencies.
+
 ## Step 1: Build and collect all errors
 
 Run the application's build command. Collect the FULL list of compilation and type errors.

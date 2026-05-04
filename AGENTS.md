@@ -1,0 +1,12 @@
+- `semver-analyzer` has a path dependency on `konveyor-core` — must be cloned as a sibling directory.
+- `frontend-analyzer-provider` has a path dependency on `fix-engine` — must be cloned as a sibling.
+- `fix-engine` has a path dependency on `konveyor-core` — must be cloned as a sibling.
+- `frontend-analyzer-provider` uses `konveyor-core` from crates.io (no sibling needed).
+- `--provider java` flag in kantra is a known bug — Java provider is not invoked for frontend analysis, but the flag is required by the CLI parser.
+
+- Commit messages: one line, signed off (`-s`), with `Co-Authored-By` when AI produced the code.
+- No comments on trivial/self-explanatory code. Only comment on externally observable behavior, complex logic, or non-obvious workarounds.
+- Do not make assumptions on core functionality — clarify unknowns first.
+- Keep AI agent prompts light and focused. No verbose examples of what NOT to do.
+- Prefer CLI options that mirror the underlying tool's flags rather than inventing abstractions.
+- Error messages should include log file path and a concrete fix suggestion.

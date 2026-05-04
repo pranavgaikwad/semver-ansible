@@ -461,6 +461,10 @@ run_migration() {
     local kantra_json="$TEMP_DIR/kantra/output.json"
     local strategies_file="$STRATEGIES_FILE"
 
+    local phase1_start=$SECONDS
+    local phase1_secs=0
+    local phase2_secs=0
+
     # ── Phase 1: Automated analysis and fixes ──
     if confirm_step "Phase 1: Run automated analysis and fixes?"; then
 
@@ -523,10 +527,13 @@ run_migration() {
             git commit -m "Apply automated migration fixes (pattern-based + LLM)") \
             > /dev/null 2>&1 || true
         info "Committed automated fixes"
+        phase1_secs=$(($SECONDS - phase1_start))
 
     else
         info "Skipping Phase 1"
     fi
+
+    local phase2_start=$SECONDS
 
     # ── Phase 2: AI agent ──
     if [[ "$SKIP_AGENT" == true ]]; then
@@ -542,8 +549,66 @@ run_migration() {
             git commit -m "Apply AI agent fixes ($AGENT)") \
             > /dev/null 2>&1 || true
         info "Committed AI agent fixes"
+        phase2_secs=$(($SECONDS - phase2_start))
     else
         info "Skipping Phase 2"
+    fi
+
+    # ── Write stats.json ──
+    local total_secs=$(($SECONDS - GLOBAL_START))
+    local stats_dir="$MIGRATE_PATH/.pf-migration"
+    mkdir -p "$stats_dir"
+    echo "*" > "$stats_dir/.gitignore"
+
+    # Collect token usage from goose sessions DB
+    local tokens_json="{}"
+    if command -v npx >/dev/null 2>&1; then
+        tokens_json=$(npx tokscale@latest -c goose --json 2>/dev/null | python3 -c "
+import sys, json
+raw = sys.stdin.read()
+start = raw.find('{')
+if start >= 0:
+    try:
+        obj = json.loads(raw[start:])
+        print(json.dumps(obj))
+    except: print('{}')
+else: print('{}')
+" 2>/dev/null || echo "{}")
+    fi
+
+    python3 -c "
+import json, sys
+tokens_raw = sys.argv[1]
+try:
+    tokens = json.loads(tokens_raw)
+except:
+    tokens = {}
+stats = {
+    'migration': {
+        'branch': sys.argv[2],
+        'base_branch': sys.argv[3],
+        'timestamp': sys.argv[4]
+    },
+    'timing': {
+        'phase1_secs': int(sys.argv[5]),
+        'phase2_secs': int(sys.argv[6]),
+        'total_secs': int(sys.argv[7])
+    },
+    'tokens': tokens
+}
+with open(sys.argv[8], 'w') as f:
+    json.dump(stats, f, indent=2)
+" "$tokens_json" \
+  "$migration_branch" \
+  "$BASE_BRANCH" \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  "$phase1_secs" \
+  "$phase2_secs" \
+  "$total_secs" \
+  "$stats_dir/stats.json" 2>/dev/null || true
+
+    if [[ -f "$stats_dir/stats.json" ]]; then
+        info "Stats written to: $stats_dir/stats.json"
     fi
 
     printf "\n"
