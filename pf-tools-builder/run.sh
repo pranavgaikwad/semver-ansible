@@ -563,7 +563,7 @@ run_migration() {
     # Collect token usage from goose sessions DB
     local tokens_json="{}"
     if command -v npx >/dev/null 2>&1; then
-        tokens_json=$(npx tokscale@latest -c goose --json 2>/dev/null | python3 -c "
+        tokens_json=$(npx --yes tokscale@latest -c goose --json 2>/dev/null | python3 -c "
 import sys, json
 raw = sys.stdin.read()
 start = raw.find('{')
