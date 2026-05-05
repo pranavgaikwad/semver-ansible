@@ -33,10 +33,10 @@ RUN : > /kantra-assets/maven-index.txt \
 # Stage 2: Rust builder — semver-analyzer, frontend-analyzer-provider, fix-engine-cli
 FROM registry.access.redhat.com/ubi9/ubi AS rust-builder
 
-ARG SEMVER_REPO=https://github.com/shawn-hurley/semver-analyzer.git
-ARG KONVEYOR_CORE_REPO=https://github.com/shawn-hurley/konveyor-core.git
-ARG FAP_REPO=https://github.com/shawn-hurley/frontend-analyzer-provider.git
-ARG FIX_ENGINE_REPO=https://github.com/shawn-hurley/fix-engine.git
+ARG SEMVER_REPO=https://github.com/konveyor-ecosystem/semver-analyzer.git
+ARG KONVEYOR_CORE_REPO=https://github.com/konveyor-ecosystem/konveyor-core.git
+ARG FAP_REPO=https://github.com/konveyor-ecosystem/frontend-analyzer-provider.git
+ARG FIX_ENGINE_REPO=https://github.com/konveyor-ecosystem/fix-engine.git
 
 RUN dnf install -y gcc gcc-c++ make openssl-devel pkg-config git && dnf clean all
 
@@ -80,7 +80,7 @@ ARG PF_DEP_TO=v6.4.0
 ARG FROM_NODE_VERSION=20
 ARG TO_NODE_VERSION=20
 ARG FROM_INSTALL_CMD=""
-ARG TOKEN_MAPPINGS_URL=https://raw.githubusercontent.com/shawn-hurley/semver-analyzer/refs/heads/main/hack/integration/patternfly-token-mappings.yaml
+ARG TOKEN_MAPPINGS_URL=https://raw.githubusercontent.com/konveyor-ecosystem/semver-analyzer/refs/heads/main/hack/integration/patternfly-token-mappings.yaml
 
 RUN dnf install -y git make gcc gcc-c++ && dnf clean all
 
