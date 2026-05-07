@@ -4,7 +4,7 @@ Ensure all @patternfly/* packages are upgraded to PatternFly 6 versions and lock
 
 ## Step 1: Build and collect all errors
 
-Run the application's build command. Collect the FULL list of compilation and type errors.
+Identify the project's actual build command by inspecting its build configuration. Use this exact command for ALL build verification throughout this process — do not substitute with other tools, as they may have different settings and miss real errors. Collect the FULL list of compilation and type errors.
 
 ## Step 2: Group errors
 
@@ -23,7 +23,7 @@ After fixing ALL categories, run the build again. If new errors appear, repeat s
 
 ## Step 5: Fix tests
 
-After the build succeeds, run the test suite. Apply the same batch approach: collect all failures, group by cause, fix in batches, then re-run.
+After the build succeeds, identify and run the project's test command. Apply the same batch approach: collect all failures, group by cause, fix in batches, then re-run.
 
 Update snapshots if the new output is correct.
 
