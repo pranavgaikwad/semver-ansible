@@ -620,10 +620,16 @@ with open(sys.argv[8], 'w') as f:
         info "Stats written to: $stats_dir/stats.json"
     fi
 
+    # Persist kantra output to logs dir so it gets copied to host
+    if [[ -d "$TEMP_DIR/kantra" ]] && ls "$TEMP_DIR/kantra/"* >/dev/null 2>&1; then
+        mkdir -p "$LOGS_DIR/kantra"
+        cp -r "$TEMP_DIR/kantra/"* "$LOGS_DIR/kantra/"
+        info "Kantra output persisted to: $LOGS_DIR/kantra/"
+    fi
+
     printf "\n"
     info "Migration complete!"
     info "Project: $MIGRATE_PATH"
-    info "Kantra output: $TEMP_DIR/kantra/"
     info "Logs: $LOGS_DIR/"
 }
 
