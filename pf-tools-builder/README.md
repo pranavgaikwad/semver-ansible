@@ -1,6 +1,11 @@
 # PatternFly Migration Tools
 
-Automated migration of PatternFly 5 applications to PatternFly 6 using static analysis, pattern-based fixes, LLM-assisted fixes, and AI agent refinement.
+Automated migration of PatternFly 5 applications to PatternFly 6 using static analysis, pattern-based fixes, LLM-assisted fixes, and AI agent refinement. Analyzes breaking changes across 7 libraries (PatternFly React, PF Topology, PF Component Groups, Dynamic Plugin SDK, Console Plugin SDK, React, React Types).
+
+There are two ways to run the migration:
+
+1. **Container** (recommended) — uses a pre-built image with all tools and rules. Only requires Podman/Docker and LLM credentials. See [Container Runner](#container-runner).
+2. **Local archive** — build tools from source with `build.sh`, then run with `run.sh`. See [Building Archives](#building-archives) and [Running Without Container](#running-without-container).
 
 ## Table of Contents
 
@@ -54,6 +59,9 @@ export GOOSE_PROVIDER=openai OPENAI_API_KEY=sk-...
 | `--bake` | off | Bake app into image instead of mounting |
 | `--goose-config <PATH>` | baked default | Override goose config directory |
 | `--image <NAME>` | `quay.io/pranavgaikwad/patternfly-tools:latest` | Container image |
+| `--keep` | off | Keep container after completion (for debugging) |
+| `--no-memory` | off | Disable memory extension and skip memory volume mount |
+| `--log-dir <PATH>` | `.pf-migration-logs/` | Directory to sync logs to |
 
 #### Optional — Migration
 
@@ -202,6 +210,7 @@ Logs are saved to `.pf-migration-logs/<timestamp>/` in the directory where you r
 | `provider.log` | Frontend analyzer provider |
 | `fix-pattern.log` | Pattern-based fix output |
 | `fix-llm.log` | LLM-assisted fix output |
+| `fix-debug/` | Per-file fix-engine debug logs |
 | `agent-goose.log` | AI agent transcript |
 | `eval-agent.log` | Evaluation agent transcript (if `--enable-eval`) |
 | `pf-migration-comparison-report.html` | Evaluation report (if `--enable-eval`) |
@@ -255,28 +264,41 @@ export GCP_PROJECT_ID=my-project GCP_LOCATION=us-east5
 
 ## Building the Container Image
 
-The `Containerfile` uses a 4-stage multi-stage build:
+The `Containerfile` uses a 10-stage multi-stage build:
 
-| Stage | Base Image | Purpose |
-|-------|-----------|---------|
-| 1 | `ubi9/go-toolset` | Build kantra + java-external-provider (Go) |
-| 2 | `ubi9/ubi` + rustup | Build semver-analyzer, frontend-analyzer-provider, fix-engine-cli (Rust) |
-| 3 | `ubi9/nodejs-20` | Generate pre-packaged migration rules |
-| 4 | `ubi9/ubi-minimal` | Runtime with Java, Maven, Goose, yq |
+| Stage | Purpose |
+|-------|---------|
+| 1 (go-builder) | Build kantra (Go) |
+| 2 (rust-builder) | Build semver-analyzer, frontend-analyzer-provider, fix-engine-cli (Rust) |
+| 3a–3g | Generate rules for each of the 7 libraries (run in parallel) |
+| 4 (runtime) | Final image with all tools, rules, and runtime dependencies |
 
 ```bash
-podman build -t localhost/semver-runner:latest -f Containerfile .
+podman build --format docker --layers=false \
+  -t quay.io/pranavgaikwad/patternfly-tools:latest \
+  -f Containerfile .
 ```
 
+Use `--format docker` for SHELL directive support. Use `--layers=false` to save disk on large builds. Use `--build-arg KANTRA_ARCH=arm64` when building on ARM.
+
 ### Build args
+
+All repos, branches, version refs, and build commands are overridable:
 
 | Arg | Default | Description |
 |-----|---------|-------------|
 | `KANTRA_VERSION` | `v0.9.2-rc.1` | Kantra release for assets |
-| `PF_REACT_FROM` | `v5.4.0` | PatternFly React source version |
+| `KANTRA_ARCH` | `amd64` | Kantra release architecture (`amd64` or `arm64`) |
+| `SEMVER_REPO` | `konveyor-ecosystem/semver-analyzer` | semver-analyzer repo URL |
+| `SEMVER_BRANCH` | `main` | semver-analyzer branch |
+| `FIX_ENGINE_REPO` | `konveyor-ecosystem/fix-engine` | fix-engine repo URL |
+| `FIX_ENGINE_BRANCH` | `main` | fix-engine branch |
+| `PF_REACT_FROM` | `v5.3.3` | PatternFly React source version |
 | `PF_REACT_TO` | `v6.4.1` | PatternFly React target version |
 | `PF_DEP_FROM` | `v5.4.0` | PatternFly CSS source version |
 | `PF_DEP_TO` | `v6.4.0` | PatternFly CSS target version |
+
+Each library stage has its own ARGs for repo, from/to refs, and install/build commands. See the Containerfile for the full list.
 
 ---
 
@@ -284,7 +306,7 @@ podman build -t localhost/semver-runner:latest -f Containerfile .
 
 ### run.sh
 
-Runs the migration directly on the host. Requires Java JDK, Maven, Goose CLI, yq or python3, git.
+Runs the migration directly on the host. Requires Goose CLI, yq or python3, git, unbuffer.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -313,13 +335,15 @@ Runs evaluation against an existing migrated branch.
 
 ## Building Archives
 
-For building a distributable ZIP without containers. See `build.sh`.
+Builds all tools from source and generates rules for all 7 libraries into a distributable ZIP archive.
 
 ```bash
 ./build.sh
 ```
 
-Prompts for target platform and kantra release. All repo URLs/branches are overridable via environment variables.
+Prompts for target platform and kantra release. All repo URLs/branches are overridable via environment variables (e.g., `SEMVER_REPO_BRANCH=updates ./build.sh`).
+
+Requires: Go 1.23+, Rust (via rustup), Node.js 18+ and 20+ (via nvm), git, curl, unzip, python3.
 
 ---
 

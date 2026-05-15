@@ -16,7 +16,7 @@ fi
 KANTRA_DIR="$SCRIPT_DIR/.kantra"
 BIN_DIR="$SCRIPT_DIR/bin"
 RULES_DIR="$SCRIPT_DIR/rules"
-STRATEGIES_FILE="$RULES_DIR/fix-guidance/fix-strategies.json"
+STRATEGIES_DIR="$RULES_DIR"
 SEMVER_BIN="$BIN_DIR/semver-analyzer"
 FAP_BIN="$BIN_DIR/frontend-analyzer-provider"
 FIX_BIN="$BIN_DIR/fix-engine-cli"
@@ -454,18 +454,16 @@ run_migration() {
         info "Temp dir:  $TEMP_DIR"
     fi
 
-    # Determine semver_rules path
-    local kantra_rules_dir
-    if [[ -d "$RULES_PATH/semver_rules" ]]; then
-        kantra_rules_dir="$RULES_PATH/semver_rules"
-    else
-        kantra_rules_dir="$RULES_PATH"
-    fi
+    local kantra_rules_dir="$RULES_PATH"
 
     local provider_settings="$TEMP_DIR/provider_settings.json"
     local kantra_yaml="$TEMP_DIR/kantra/output.yaml"
     local kantra_json="$TEMP_DIR/kantra/output.json"
-    local strategies_file="$STRATEGIES_FILE"
+    # Collect all fix-guidance JSON files as --strategies flags
+    local strategies_args=()
+    while IFS= read -r -d '' f; do
+        strategies_args+=(--strategies "$f")
+    done < <(find "$STRATEGIES_DIR" -name "*.json" -path "*/fix-guidance/*" -print0 2>/dev/null || true)
 
     local phase1_start=$SECONDS
     local phase1_secs=0
@@ -505,13 +503,12 @@ run_migration() {
         info "Converted: $kantra_json"
 
         step "6/$total" "Applying pattern-based fixes"
-        require_file "$strategies_file"
 
         run_timed "Pattern-based fixes" "$LOGS_DIR/fix-pattern.log" \
             unbuffer "$FIX_BIN" fix "$MIGRATE_PATH" \
-            --strategies "$strategies_file" \
             --input "$kantra_json" \
-            --log-dir "$LOGS_DIR/fix-debug" || {
+            --log-dir "$LOGS_DIR/fix-debug" \
+            "${strategies_args[@]}" || {
                 die "Pattern-based fix failed. Check $LOGS_DIR/fix-pattern.log"
             }
 
@@ -520,10 +517,10 @@ run_migration() {
             unbuffer "$FIX_BIN" fix "$MIGRATE_PATH" \
             --input "$kantra_json" \
             --llm-provider goose \
-            --strategies "$strategies_file" \
             --goose-timeout "$LLM_TIMEOUT" \
-            --log-dir "$LOGS_DIR/fix-debug" || {
-                warn "LLM-based fix returned non-zero (some fixes may have failed). Check $LOGS_DIR/fix-llm.log"
+            --log-dir "$LOGS_DIR/fix-debug" \
+            "${strategies_args[@]}" || {
+                warn "LLM-based fix returned non-zero (some or all fixes may have failed). Check $LOGS_DIR/fix-llm.log"
             }
 
         # Commit automated fixes

@@ -33,24 +33,64 @@ platform_lookup() {
 
 # ── Repo defaults ────────────────────────────────────────────────────────
 KANTRA_REPO_URL="https://github.com/konveyor/kantra.git"
-KANTRA_REPO_BRANCH=""
+KANTRA_REPO_BRANCH="${KANTRA_REPO_BRANCH:-}"
 SEMVER_REPO_URL="https://github.com/konveyor-ecosystem/semver-analyzer.git"
-SEMVER_REPO_BRANCH=""
+SEMVER_REPO_BRANCH="${SEMVER_REPO_BRANCH:-}"
 KONVEYOR_CORE_REPO_URL="https://github.com/konveyor-ecosystem/konveyor-core.git"
-KONVEYOR_CORE_REPO_BRANCH=""
+KONVEYOR_CORE_REPO_BRANCH="${KONVEYOR_CORE_REPO_BRANCH:-}"
 FAP_REPO_URL="https://github.com/konveyor-ecosystem/frontend-analyzer-provider.git"
-FAP_REPO_BRANCH=""
+FAP_REPO_BRANCH="${FAP_REPO_BRANCH:-}"
 FIX_ENGINE_REPO_URL="https://github.com/konveyor-ecosystem/fix-engine.git"
-FIX_ENGINE_REPO_BRANCH=""
+FIX_ENGINE_REPO_BRANCH="${FIX_ENGINE_REPO_BRANCH:-}"
 ANALYZER_LSP_REPO_URL="https://github.com/konveyor/analyzer-lsp.git"
-ANALYZER_LSP_REPO_BRANCH=""
+ANALYZER_LSP_REPO_BRANCH="${ANALYZER_LSP_REPO_BRANCH:-}"
 PF_REACT_REPO_URL="https://github.com/patternfly/patternfly-react.git"
-PF_REACT_FROM="${PF_REACT_FROM:-v5.4.0}"
+PF_REACT_FROM="${PF_REACT_FROM:-v5.3.3}"
 PF_REACT_TO="${PF_REACT_TO:-v6.4.1}"
 PF_REPO_URL="https://github.com/patternfly/patternfly.git"
 PF_DEP_FROM="${PF_DEP_FROM:-v5.4.0}"
 PF_DEP_TO="${PF_DEP_TO:-v6.4.0}"
 TOKEN_MAPPINGS_URL="https://raw.githubusercontent.com/konveyor-ecosystem/semver-analyzer/refs/heads/main/hack/integration/patternfly-token-mappings.yaml"
+
+# PatternFly React Topology
+TOPOLOGY_REPO_URL="https://github.com/patternfly/react-topology.git"
+TOPOLOGY_FROM="${TOPOLOGY_FROM:-v5.4.1}"
+TOPOLOGY_TO="${TOPOLOGY_TO:-v6.4.0}"
+TOPOLOGY_INSTALL_CMD='npm install --ignore-scripts --legacy-peer-deps'
+TOPOLOGY_BUILD_CMD='cd packages/module && npm run build'
+
+# PatternFly React Component Groups
+RCG_REPO_URL="https://github.com/patternfly/react-component-groups.git"
+RCG_FROM="${RCG_FROM:-v5.5.3}"
+RCG_TO="${RCG_TO:-v6.4.0}"
+RCG_INSTALL_CMD='npm ci'
+RCG_BUILD_CMD='npm run build'
+
+# Dynamic Plugin SDK
+SDK_REPO_URL="https://github.com/openshift/dynamic-plugin-sdk.git"
+SDK_FROM_DATE="${SDK_FROM_DATE:-2023-04-13}"
+SDK_TO_DATE="${SDK_TO_DATE:-2024-01-15}"
+SDK_BUILD_CMD="yarn install && yarn build"
+
+# Console SDK
+CONSOLE_REPO_URL="https://github.com/openshift/console.git"
+CONSOLE_FROM="${CONSOLE_FROM:-origin/release-4.17}"
+CONSOLE_TO="${CONSOLE_TO:-origin/release-4.19}"
+CONSOLE_SDK_FROM_VERSION="${CONSOLE_SDK_FROM_VERSION:-1.4.0}"
+CONSOLE_SDK_TO_VERSION="${CONSOLE_SDK_TO_VERSION:-4.21.0}"
+CONSOLE_INSTALL_CMD="cd frontend && corepack enable && YARN_ENABLE_SCRIPTS=false yarn install"
+CONSOLE_BUILD_CMD="cd frontend && yarn build-plugin-sdk"
+
+# React
+REACT_REPO_URL="https://github.com/facebook/react.git"
+REACT_FROM="${REACT_FROM:-v17.0.2}"
+REACT_TO="${REACT_TO:-v18.3.1}"
+REACT_BUILD_CMD="npx yarn@1 build"
+
+# React Types (DefinitelyTyped)
+DT_REPO_URL="https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+REACT_TYPES_FROM="${REACT_TYPES_FROM:-v17}"
+REACT_TYPES_TO="${REACT_TYPES_TO:-v18}"
 
 # ── State ────────────────────────────────────────────────────────────────
 HOST_PLATFORM=""
@@ -80,6 +120,67 @@ git_clone() {
     [[ -n "$branch" ]] && args="$args --branch $branch"
     # shellcheck disable=SC2086
     git clone $args "$url" "$dest" >> "$logfile" 2>&1
+}
+
+find_commit_by_date() {
+    local repo_dir="$1" target_date="$2" pkg_path="$3"
+    local before_date after_date commit
+    before_date=$(date -j -v+2d -f "%Y-%m-%d" "$target_date" "+%Y-%m-%d" 2>/dev/null \
+        || date -d "$target_date + 2 days" "+%Y-%m-%d" 2>/dev/null)
+    after_date=$(date -j -v-2d -f "%Y-%m-%d" "$target_date" "+%Y-%m-%d" 2>/dev/null \
+        || date -d "$target_date - 2 days" "+%Y-%m-%d" 2>/dev/null)
+    commit=$(cd "$repo_dir" && git log \
+        --after="$after_date" --before="$before_date" \
+        --format="%H" -- "$pkg_path" 2>/dev/null | head -1)
+    if [[ -z "$commit" ]]; then
+        commit=$(cd "$repo_dir" && git log \
+            --after="$after_date" --before="$before_date" \
+            --format="%H" 2>/dev/null | head -1)
+    fi
+    echo "$commit"
+}
+
+run_analyze_and_rules() {
+    local name="$1" report_path="$2" ruleset_name="$3"; shift 3
+    local analyze_log="$BUILD_TMP/analyze-${name}.log"
+    local rules_log="$BUILD_TMP/rules-${name}.log"
+    local output_dir="$BUILD_DIR/rules/${name}/semver_rules"
+
+    mkdir -p "$output_dir"
+
+    info "Running semver-analyzer analyze for $name..."
+    "$HOST_SEMVER_BIN" analyze typescript \
+        "$@" \
+        --no-llm \
+        --log-file "$analyze_log" --log-level info \
+        -o "$report_path" \
+        > "$analyze_log.stdout" 2>&1 || die "analyze failed for $name. Check $analyze_log"
+
+    info "Running semver-analyzer konveyor for $name..."
+    local extra_konveyor_args=()
+    [[ -n "${KONVEYOR_RENAME_PATTERNS:-}" ]] && extra_konveyor_args+=(--rename-patterns "$KONVEYOR_RENAME_PATTERNS")
+    [[ -n "${KONVEYOR_PKG_NAME_MAP:-}" ]] && extra_konveyor_args+=(--package-name-map "$KONVEYOR_PKG_NAME_MAP")
+    [[ -n "${KONVEYOR_PKG_VERSION:-}" ]] && extra_konveyor_args+=(--package-version "$KONVEYOR_PKG_VERSION")
+
+    "$HOST_SEMVER_BIN" konveyor typescript \
+        --from-report "$report_path" \
+        --output-dir "$output_dir" \
+        --ruleset-name "$ruleset_name" \
+        --log-file "$rules_log" --log-level info \
+        "${extra_konveyor_args[@]}" \
+        > "$rules_log.stdout" 2>&1 || die "konveyor failed for $name. Check $rules_log"
+
+    KONVEYOR_RENAME_PATTERNS=""
+    KONVEYOR_PKG_NAME_MAP=""
+    KONVEYOR_PKG_VERSION=""
+
+    local rule_count=0
+    for rf in "$output_dir"/*.yaml; do
+        if [[ -f "$rf" ]]; then
+            rule_count=$((rule_count + $(grep -c 'ruleID:' "$rf" 2>/dev/null | tr -d '[:space:]' || echo 0)))
+        fi
+    done
+    info "$name: $rule_count rules generated"
 }
 
 prompt_select() {
@@ -198,7 +299,7 @@ select_platform() {
 
 # ── Kantra ───────────────────────────────────────────────────────────────
 select_kantra_release() {
-    step "1/13" "Selecting kantra release"
+    step "1/19" "Selecting kantra release"
     info "Querying GitHub for kantra releases..."
 
     local suffix
@@ -229,7 +330,7 @@ for r in releases:
 }
 
 download_kantra() {
-    step "2/13" "Downloading kantra release"
+    step "2/19" "Downloading kantra release"
 
     local suffix
     suffix=$(platform_lookup kantra_suffix "$TARGET_PLATFORM")
@@ -260,7 +361,7 @@ download_kantra() {
 }
 
 build_kantra_from_source() {
-    step "3/13" "Building kantra from source (Go)"
+    step "3/19" "Building kantra from source (Go)"
 
     local kantra_src="$BUILD_TMP/kantra-src"
 
@@ -287,7 +388,7 @@ build_kantra_from_source() {
 }
 
 build_java_external_provider() {
-    step "4/13" "Building java-external-provider from analyzer-lsp"
+    step "4/19" "Building java-external-provider from analyzer-lsp"
 
     local analyzer_src="$BUILD_TMP/analyzer-lsp"
 
@@ -357,7 +458,7 @@ rust_build() {
 }
 
 build_semver_analyzer() {
-    step "5/13" "Building semver-analyzer"
+    step "5/19" "Building semver-analyzer"
 
     local semver_src="$BUILD_TMP/semver-analyzer"
     local konveyor_core_src="$BUILD_TMP/konveyor-core"
@@ -387,7 +488,7 @@ build_host_semver_analyzer() {
         return
     fi
 
-    step "6/13" "Building semver-analyzer for host (needed for rule generation)"
+    step "6/19" "Building semver-analyzer for host (needed for rule generation)"
 
     local semver_src="$BUILD_TMP/semver-analyzer"
     local host_target
@@ -398,7 +499,7 @@ build_host_semver_analyzer() {
 }
 
 build_frontend_analyzer_provider() {
-    step "7/13" "Building frontend-analyzer-provider"
+    step "7/19" "Building frontend-analyzer-provider"
 
     local fap_src="$BUILD_TMP/frontend-analyzer-provider"
 
@@ -424,98 +525,215 @@ build_frontend_analyzer_provider() {
     info "fix-engine-cli built"
 }
 
-# ── Pre-packaged rules ───────────────────────────────────────────────────
-generate_prepackaged_rules() {
-    step "9/13" "Generating pre-packaged rules"
-
+# ── Rule generation for all libraries ────────────────────────────────────
+ensure_nvm() {
     local nvm_dir="${NVM_DIR:-$HOME/.nvm}"
-    if [[ ! -f "$nvm_dir/nvm.sh" ]]; then
-        die "nvm required for rule generation. Install from https://github.com/nvm-sh/nvm"
-    fi
+    [[ -f "$nvm_dir/nvm.sh" ]] || die "nvm required for rule generation. Install from https://github.com/nvm-sh/nvm"
+}
+
+generate_pf_rules() {
+    step "9/19" "Generating PatternFly React rules"
+    ensure_nvm
 
     local pf_react_src="$BUILD_TMP/patternfly-react"
     local pf_src="$BUILD_TMP/patternfly"
-
     local clone_log="$BUILD_TMP/clone-patternfly.log"
 
-    if [[ ! -d "$pf_react_src/.git" ]]; then
-        info "Cloning patternfly-react..."
-        git_clone "$PF_REACT_REPO_URL" "$pf_react_src" "" "$clone_log" \
-            || die "Failed to clone patternfly-react. Check $clone_log"
-    fi
-
-    if [[ ! -d "$pf_src/.git" ]]; then
-        info "Cloning patternfly..."
-        git_clone "$PF_REPO_URL" "$pf_src" "" "$clone_log" \
-            || die "Failed to clone patternfly. Check $clone_log"
-    fi
+    [[ -d "$pf_react_src/.git" ]] || git_clone "$PF_REACT_REPO_URL" "$pf_react_src" "" "$clone_log" \
+        || die "Failed to clone patternfly-react. Check $clone_log"
+    [[ -d "$pf_src/.git" ]] || git_clone "$PF_REPO_URL" "$pf_src" "" "$clone_log" \
+        || die "Failed to clone patternfly. Check $clone_log"
 
     info "patternfly-react: $PF_REACT_FROM -> $PF_REACT_TO"
-    info "patternfly:       $PF_DEP_FROM -> $PF_DEP_TO"
 
-    local dep_build_cmd="source ~/.nvm/nvm.sh && nvm exec 20.11.0 bash -c 'export NODE_ENV=development && yarn install && npx gulp buildPatternfly'"
+    KONVEYOR_RENAME_PATTERNS="" KONVEYOR_PKG_NAME_MAP="" KONVEYOR_PKG_VERSION=""
+    [[ -f "$BUILD_DIR/patternfly-token-mappings.yaml" ]] && KONVEYOR_RENAME_PATTERNS="$BUILD_DIR/patternfly-token-mappings.yaml"
 
-    local analyze_log="$BUILD_TMP/semver-analyze.log"
-    local konveyor_log="$BUILD_TMP/semver-konveyor.log"
+    local dep_build_cmd="export NODE_ENV=development && yarn install && npx gulp buildPatternfly"
 
-    info "Running semver-analyzer analyze..."
-    info "Log: $analyze_log"
-    info "Running '$HOST_SEMVER_BIN analyze typescript --repo $pf_react_src --from $PF_REACT_FROM --to $PF_REACT_TO --no-llm'"
-    "$HOST_SEMVER_BIN" analyze typescript \
+    run_analyze_and_rules "patternfly" "$BUILD_TMP/pf-report.json" "patternfly-breaking-changes" \
         --repo "$pf_react_src" \
-        --from "$PF_REACT_FROM" \
-        --to "$PF_REACT_TO" \
+        --from "$PF_REACT_FROM" --to "$PF_REACT_TO" \
         --dep-repo "$pf_src" \
-        --dep-from "$PF_DEP_FROM" \
-        --dep-to "$PF_DEP_TO" \
+        --dep-from "$PF_DEP_FROM" --dep-to "$PF_DEP_TO" \
         --dep-build-command "$dep_build_cmd" \
-        --build-command 'corepack yarn build' \
-        --no-llm \
-        --log-file "$analyze_log" \
-        --log-level info \
-        -o "$BUILD_TMP/semver_report.json" \
-        > "$analyze_log.stdout" 2>&1 || die "semver-analyzer analyze failed. Check $analyze_log"
+        --from-node-version 18 \
+        --from-install-command "npx yarn@1 install --frozen-lockfile" \
+        --from-build-command "npx yarn@1 build" \
+        --to-build-command "yarn build:generate && yarn build:esm"
+}
 
-    info "Running semver-analyzer konveyor..."
-    info "Follow logs: tail -f $konveyor_log"
-    mkdir -p "$BUILD_DIR/rules/semver_rules"
+generate_topology_rules() {
+    step "10/19" "Generating PatternFly Topology rules"
+    ensure_nvm
 
-    local rename_args=""
-    if [[ -f "$BUILD_DIR/patternfly-token-mappings.yaml" ]]; then
-        rename_args="--rename-patterns $BUILD_DIR/patternfly-token-mappings.yaml"
+    local repo_src="$BUILD_TMP/react-topology"
+    local clone_log="$BUILD_TMP/clone-topology.log"
+    [[ -d "$repo_src/.git" ]] || git_clone "$TOPOLOGY_REPO_URL" "$repo_src" "" "$clone_log" \
+        || die "Failed to clone react-topology. Check $clone_log"
+
+    info "react-topology: $TOPOLOGY_FROM -> $TOPOLOGY_TO"
+    KONVEYOR_RENAME_PATTERNS="" KONVEYOR_PKG_NAME_MAP="" KONVEYOR_PKG_VERSION=""
+    run_analyze_and_rules "topology" "$BUILD_TMP/topology-report.json" "topology-breaking-changes" \
+        --repo "$repo_src" \
+        --from "$TOPOLOGY_FROM" --to "$TOPOLOGY_TO" \
+        --from-install-command "$TOPOLOGY_INSTALL_CMD" \
+        --to-install-command "$TOPOLOGY_INSTALL_CMD" \
+        --from-build-command "$TOPOLOGY_BUILD_CMD" \
+        --to-build-command "$TOPOLOGY_BUILD_CMD"
+}
+
+generate_rcg_rules() {
+    step "11/19" "Generating PatternFly Component Groups rules"
+    ensure_nvm
+
+    local repo_src="$BUILD_TMP/react-component-groups"
+    local clone_log="$BUILD_TMP/clone-rcg.log"
+    [[ -d "$repo_src/.git" ]] || git_clone "$RCG_REPO_URL" "$repo_src" "" "$clone_log" \
+        || die "Failed to clone react-component-groups. Check $clone_log"
+
+    info "react-component-groups: $RCG_FROM -> $RCG_TO"
+    KONVEYOR_RENAME_PATTERNS="" KONVEYOR_PKG_NAME_MAP="" KONVEYOR_PKG_VERSION=""
+    run_analyze_and_rules "rcg" "$BUILD_TMP/rcg-report.json" "react-component-groups-breaking-changes" \
+        --repo "$repo_src" \
+        --from "$RCG_FROM" --to "$RCG_TO" \
+        --from-install-command "$RCG_INSTALL_CMD" \
+        --to-install-command "$RCG_INSTALL_CMD" \
+        --from-build-command "$RCG_BUILD_CMD" \
+        --to-build-command "$RCG_BUILD_CMD"
+}
+
+generate_sdk_rules() {
+    step "12/19" "Generating Dynamic Plugin SDK rules"
+    ensure_nvm
+
+    local repo_src="$BUILD_TMP/dynamic-plugin-sdk"
+    local clone_log="$BUILD_TMP/clone-sdk.log"
+    [[ -d "$repo_src/.git" ]] || git_clone "$SDK_REPO_URL" "$repo_src" "" "$clone_log" \
+        || die "Failed to clone dynamic-plugin-sdk. Check $clone_log"
+
+    local from_commit to_commit
+    from_commit=$(find_commit_by_date "$repo_src" "$SDK_FROM_DATE" "packages/lib-core/package.json")
+    to_commit=$(find_commit_by_date "$repo_src" "$SDK_TO_DATE" "packages/lib-core/package.json")
+
+    if [[ -z "$from_commit" || -z "$to_commit" ]]; then
+        warn "Could not resolve SDK commits from dates. Skipping."
+        return
     fi
 
-    # shellcheck disable=SC2086
-    "$HOST_SEMVER_BIN" konveyor typescript \
-        --from-report "$BUILD_TMP/semver_report.json" \
-        --output-dir "$BUILD_DIR/rules/semver_rules" \
-        --log-file "$konveyor_log" \
-        --log-level info \
-        $rename_args \
-        > "$konveyor_log.stdout" 2>&1 || die "semver-analyzer konveyor failed. Check $konveyor_log"
+    info "dynamic-plugin-sdk: ${from_commit:0:10} -> ${to_commit:0:10}"
+    KONVEYOR_RENAME_PATTERNS="" KONVEYOR_PKG_NAME_MAP="" KONVEYOR_PKG_VERSION=""
+    run_analyze_and_rules "sdk" "$BUILD_TMP/sdk-report.json" "dynamic-plugin-sdk-breaking-changes" \
+        --repo "$repo_src" \
+        --from "$from_commit" --to "$to_commit" \
+        --from-build-command "$SDK_BUILD_CMD" \
+        --to-build-command "$SDK_BUILD_CMD"
+}
 
-    # konveyor writes fix-guidance as sibling of output-dir, which is already $BUILD_DIR/rules/fix-guidance
-    if [[ -d "$BUILD_DIR/rules/fix-guidance" ]]; then
-        info "fix-guidance generated at $BUILD_DIR/rules/fix-guidance/"
+generate_console_rules() {
+    step "13/19" "Generating Console SDK rules"
+    ensure_nvm
+
+    local repo_src="$BUILD_TMP/console"
+    local clone_log="$BUILD_TMP/clone-console.log"
+    [[ -d "$repo_src/.git" ]] || git_clone "$CONSOLE_REPO_URL" "$repo_src" "" "$clone_log" \
+        || die "Failed to clone openshift/console. Check $clone_log"
+
+    info "console-sdk: $CONSOLE_FROM -> $CONSOLE_TO"
+    KONVEYOR_RENAME_PATTERNS=""
+    KONVEYOR_PKG_NAME_MAP="@console/dynamic-plugin-sdk=@openshift-console/dynamic-plugin-sdk"
+    KONVEYOR_PKG_VERSION="@openshift-console/dynamic-plugin-sdk=${CONSOLE_SDK_FROM_VERSION}:${CONSOLE_SDK_TO_VERSION}"
+
+    run_analyze_and_rules "console" "$BUILD_TMP/console-report.json" "console-sdk-breaking-changes" \
+        --repo "$repo_src" \
+        --from "$CONSOLE_FROM" --to "$CONSOLE_TO" \
+        --from-install-command "$CONSOLE_INSTALL_CMD" \
+        --to-install-command "$CONSOLE_INSTALL_CMD" \
+        --from-build-command "$CONSOLE_BUILD_CMD" \
+        --to-build-command "$CONSOLE_BUILD_CMD"
+}
+
+generate_react_rules() {
+    step "14/19" "Generating React rules"
+    ensure_nvm
+
+    local repo_src="$BUILD_TMP/react"
+    local clone_log="$BUILD_TMP/clone-react.log"
+    if [[ ! -d "$repo_src/.git" ]]; then
+        git clone --bare "$REACT_REPO_URL" "$repo_src/.git" >> "$clone_log" 2>&1 \
+            || die "Failed to clone react. Check $clone_log"
+        (cd "$repo_src" && git config core.bare false && git checkout "$REACT_TO" 2>/dev/null)
     fi
 
-    local rule_count=0
-    if [[ -f "$BUILD_DIR/rules/semver_rules/breaking-changes.yaml" ]]; then
-        rule_count=$(grep -c 'ruleID:' "$BUILD_DIR/rules/semver_rules/breaking-changes.yaml" || echo 0)
-    fi
-    info "Rules generated: $rule_count"
+    info "react: $REACT_FROM -> $REACT_TO"
+    KONVEYOR_RENAME_PATTERNS="" KONVEYOR_PKG_NAME_MAP="" KONVEYOR_PKG_VERSION=""
 
-    # Store metadata for MANIFEST
-    MANIFEST_PF_REACT_FROM="$PF_REACT_FROM"
-    MANIFEST_PF_REACT_TO="$PF_REACT_TO"
-    MANIFEST_PF_DEP_FROM="$PF_DEP_FROM"
-    MANIFEST_PF_DEP_TO="$PF_DEP_TO"
-    MANIFEST_RULE_COUNT="$rule_count"
+    local react_install_cmd="export ELECTRON_SKIP_BINARY_DOWNLOAD=1 && export NVM_DIR=\"\$HOME/.nvm\" && . \"\$NVM_DIR/nvm.sh\" && nvm exec 18 npx yarn@1 install --ignore-optional --ignore-scripts"
+
+    (run_analyze_and_rules "react" "$BUILD_TMP/react-report.json" "react-breaking-changes" \
+        --repo "$repo_src" \
+        --from "$REACT_FROM" --to "$REACT_TO" \
+        --from-node-version 14 \
+        --to-node-version 14 \
+        --from-install-command "$react_install_cmd" \
+        --to-install-command "$react_install_cmd" \
+        --from-build-command "$REACT_BUILD_CMD" \
+        --to-build-command "$REACT_BUILD_CMD") \
+        || warn "React rule generation failed (Node 14 may not be available on this platform)"
+}
+
+generate_react_types_rules() {
+    step "15/19" "Generating React Types rules"
+
+    local dt_src="$BUILD_TMP/DefinitelyTyped"
+    local repo_src="$BUILD_TMP/react-types"
+    local clone_log="$BUILD_TMP/clone-react-types.log"
+
+    if [[ ! -d "$dt_src/.git" ]]; then
+        info "Sparse-cloning DefinitelyTyped..."
+        git clone --filter=blob:none --sparse "$DT_REPO_URL" "$dt_src" >> "$clone_log" 2>&1 \
+            || die "Failed to clone DefinitelyTyped. Check $clone_log"
+        (cd "$dt_src" && git sparse-checkout set types/react types/react-dom)
+    fi
+
+    if [[ ! -d "$repo_src/.git" ]]; then
+        info "Building synthetic repo..."
+        mkdir -p "$repo_src" && cd "$repo_src" && git init -q
+        mkdir -p packages/react packages/react-dom
+        cp -a "$dt_src/types/react/v17/"* packages/react/ 2>/dev/null || true
+        rm -rf packages/react/test
+        cp -a "$dt_src/types/react-dom/v17/"* packages/react-dom/ 2>/dev/null || true
+        rm -rf packages/react-dom/test
+        find packages -name package.json -exec sed -i.bak 's/\([0-9]\+\)\.\([0-9]\+\)\.9999/\1.\2.0/g' {} +
+        find packages -name "*.bak" -delete
+        git add -A && git commit -q -m "v17: @types/react v17" && git tag v17
+
+        rm -rf packages/react/* packages/react-dom/*
+        cp -a "$dt_src/types/react/v18/"* packages/react/ 2>/dev/null || true
+        rm -rf packages/react/test packages/react/ts5.0
+        cp -a "$dt_src/types/react-dom/v18/"* packages/react-dom/ 2>/dev/null || true
+        rm -rf packages/react-dom/test packages/react-dom/ts5.0
+        find packages -name package.json -exec sed -i.bak 's/\([0-9]\+\)\.\([0-9]\+\)\.9999/\1.\2.0/g' {} +
+        find packages -name "*.bak" -delete
+        git add -A && git commit -q -m "v18: @types/react v18" && git tag v18
+        cd "$OLDPWD"
+    fi
+
+    info "react-types: $REACT_TYPES_FROM -> $REACT_TYPES_TO"
+    KONVEYOR_RENAME_PATTERNS="" KONVEYOR_PKG_NAME_MAP="" KONVEYOR_PKG_VERSION=""
+    (run_analyze_and_rules "react-types" "$BUILD_TMP/react-types-report.json" "react-types-breaking-changes" \
+        --repo "$repo_src" \
+        --from "$REACT_TYPES_FROM" --to "$REACT_TYPES_TO" \
+        --from-install-command "true" \
+        --to-install-command "true" \
+        --from-build-command "true" \
+        --to-build-command "true") \
+        || warn "React Types rule generation failed"
 }
 
 # ── Extras ───────────────────────────────────────────────────────────────
 download_token_mappings() {
-    step "8/13" "Downloading token mappings (before rule generation)"
+    step "8/25" "Downloading token mappings (before rule generation)"
 
     curl -fSL -o "$BUILD_DIR/patternfly-token-mappings.yaml" "$TOKEN_MAPPINGS_URL" \
         >> "$BUILD_TMP/download-token-mappings.log" 2>&1 || die "Failed to download token mappings"
@@ -524,7 +742,7 @@ download_token_mappings() {
 }
 
 copy_prompt() {
-    step "10/13" "Copying prompt.md"
+    step "16/19" "Copying prompt.md"
 
     cp "$SCRIPT_DIR/prompt.md" "$BUILD_DIR/prompt.md" \
         || die "prompt.md not found in $SCRIPT_DIR"
@@ -541,7 +759,7 @@ git_sha() {
 }
 
 generate_manifest() {
-    step "11/13" "Generating MANIFEST"
+    step "17/19" "Generating MANIFEST"
 
     local build_date
     build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -585,16 +803,40 @@ repo = ${KONVEYOR_CORE_REPO_URL}
 branch = ${KONVEYOR_CORE_REPO_BRANCH:-default}
 source_sha = $(git_sha "$BUILD_TMP/konveyor-core")
 
-[rules]
-patternfly_react_repo = ${PF_REACT_REPO_URL}
-patternfly_react_from = ${MANIFEST_PF_REACT_FROM:-}
-patternfly_react_to = ${MANIFEST_PF_REACT_TO:-}
-patternfly_react_sha = $(git_sha "$BUILD_TMP/patternfly-react")
-patternfly_repo = ${PF_REPO_URL}
-patternfly_dep_from = ${MANIFEST_PF_DEP_FROM:-}
-patternfly_dep_to = ${MANIFEST_PF_DEP_TO:-}
-patternfly_sha = $(git_sha "$BUILD_TMP/patternfly")
-rule_count = ${MANIFEST_RULE_COUNT:-0}
+[rules.patternfly]
+repo = ${PF_REACT_REPO_URL}
+from = ${PF_REACT_FROM}
+to = ${PF_REACT_TO}
+
+[rules.topology]
+repo = ${TOPOLOGY_REPO_URL}
+from = ${TOPOLOGY_FROM}
+to = ${TOPOLOGY_TO}
+
+[rules.react-component-groups]
+repo = ${RCG_REPO_URL}
+from = ${RCG_FROM}
+to = ${RCG_TO}
+
+[rules.dynamic-plugin-sdk]
+repo = ${SDK_REPO_URL}
+from_date = ${SDK_FROM_DATE}
+to_date = ${SDK_TO_DATE}
+
+[rules.console-sdk]
+repo = ${CONSOLE_REPO_URL}
+from = ${CONSOLE_FROM}
+to = ${CONSOLE_TO}
+
+[rules.react]
+repo = ${REACT_REPO_URL}
+from = ${REACT_FROM}
+to = ${REACT_TO}
+
+[rules.react-types]
+repo = ${DT_REPO_URL}
+from = ${REACT_TYPES_FROM}
+to = ${REACT_TYPES_TO}
 MANIFEST
 
     info "MANIFEST written"
@@ -602,7 +844,7 @@ MANIFEST
 }
 
 copy_run_script() {
-    step "12/13" "Copying run.sh"
+    step "18/19" "Copying run.sh"
 
     cp "$SCRIPT_DIR/run.sh" "$BUILD_DIR/run.sh"
     chmod +x "$BUILD_DIR/run.sh"
@@ -613,7 +855,7 @@ copy_run_script() {
 }
 
 package_archive() {
-    step "13/13" "Packaging archive"
+    step "19/25" "Packaging archive"
 
     # Preserve build logs in the archive
     mkdir -p "$BUILD_DIR/logs"
@@ -663,7 +905,13 @@ main() {
     build_host_semver_analyzer
     build_frontend_analyzer_provider
     download_token_mappings
-    generate_prepackaged_rules
+    generate_pf_rules
+    generate_topology_rules
+    generate_rcg_rules
+    generate_sdk_rules
+    generate_console_rules
+    generate_react_rules
+    generate_react_types_rules
     copy_prompt
     generate_manifest
     copy_run_script

@@ -4,10 +4,10 @@ Migrate PatternFly 5 applications to PatternFly 6 using pre-packaged rules and A
 
 ## Prerequisites
 
-- **Java JDK** with `JAVA_HOME` set
 - **AI agent** (one of): [Goose](https://github.com/block/goose), [Claude Code](https://docs.anthropic.com/en/docs/claude-code), or [OpenCode](https://github.com/opencode-ai/opencode)
 - **yq** or **python3** (for YAML-to-JSON conversion)
-- **unbuffer** (for MacOS `brew install expect`)
+- **unbuffer** (`brew install expect` on macOS)
+- **git**
 
 For rule generation only:
 - **git**
@@ -143,6 +143,7 @@ Logs are written to `logs/<timestamp>/` relative to the script directory:
 | `provider.log` | Frontend analyzer provider |
 | `fix-pattern.log` | Pattern-based fix output |
 | `fix-llm.log` | LLM-assisted fix output |
+| `fix-debug/` | Per-file fix-engine debug logs |
 | `agent-goose.log` | AI agent transcript |
 
 ## Examples
